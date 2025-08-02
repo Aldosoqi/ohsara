@@ -1,36 +1,35 @@
-import { Crown, Check } from "lucide-react";
+import { Check, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
 
 const Upgrade = () => {
+  const [creditBlocks, setCreditBlocks] = useState(1);
+
   const plans = [
     {
-      name: "Free",
-      price: "$0",
-      description: "Get started with basic summarization",
+      name: "Try Ohsara for Free",
+      price: "Free",
+      description: "5 free summaries for all new users",
       features: [
-        "5 summaries per month",
-        "Basic key points extraction",
-        "Standard processing speed",
-        "Email support"
+        "Basic summarization",
+        "History view"
       ],
       buttonText: "Current Plan",
-      isPro: false
+      isFree: true
     },
     {
-      name: "Pro",
-      price: "$9.99",
-      description: "Unlock advanced features and unlimited access",
+      name: "Pay For What You Use",
+      price: `$${10 * creditBlocks}`,
+      description: `${100 * creditBlocks} summaries`,
       features: [
-        "Unlimited summaries",
-        "Advanced AI analysis",
-        "Interactive chat with summaries",
-        "Export to PDF/Markdown",
-        "Priority processing",
-        "Priority support"
+        "Export as TXT/PDF",
+        "Save Summaries to Storage", 
+        "AI Chat Interface for Follow-up Questions",
+        "Credits Never Expire"
       ],
-      buttonText: "Upgrade to Pro",
-      isPro: true
+      buttonText: `Purchase ${100 * creditBlocks} Credits`,
+      isFree: false
     }
   ];
 
@@ -45,29 +44,44 @@ const Upgrade = () => {
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {plans.map((plan) => (
+          {plans.map((plan, index) => (
             <Card 
               key={plan.name} 
-              className={`relative ${plan.isPro ? 'border-primary border-2' : 'border-border'}`}
+              className={`relative ${!plan.isFree ? 'border-primary border-2' : 'border-border'}`}
             >
-              {plan.isPro && (
-                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                  <div className="bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-medium">
-                    Most Popular
-                  </div>
-                </div>
-              )}
-              
               <CardHeader className="text-center pb-6">
                 <CardTitle className="text-2xl font-semibold">{plan.name}</CardTitle>
                 <div className="mt-4">
                   <span className="text-4xl font-bold text-foreground">{plan.price}</span>
-                  <span className="text-muted-foreground">/month</span>
+                  {!plan.isFree && <span className="text-muted-foreground"> per {100 * creditBlocks} summaries</span>}
                 </div>
                 <CardDescription className="mt-2">{plan.description}</CardDescription>
               </CardHeader>
               
               <CardContent className="space-y-6">
+                {!plan.isFree && (
+                  <div className="flex items-center justify-center gap-4 p-4 bg-muted rounded-lg">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCreditBlocks(Math.max(1, creditBlocks - 1))}
+                      disabled={creditBlocks <= 1}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <span className="text-lg font-medium">
+                      {creditBlocks} × 100 credits
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCreditBlocks(creditBlocks + 1)}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                
                 <ul className="space-y-3">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-center gap-3">
@@ -79,13 +93,12 @@ const Upgrade = () => {
                 
                 <Button 
                   className={`w-full h-12 ${
-                    plan.isPro 
+                    !plan.isFree 
                       ? 'bg-primary hover:bg-primary/90 text-primary-foreground' 
                       : 'bg-secondary hover:bg-secondary/80 text-secondary-foreground'
                   }`}
-                  disabled={!plan.isPro}
+                  disabled={plan.isFree}
                 >
-                  {plan.isPro && <Crown className="h-4 w-4 mr-2" />}
                   {plan.buttonText}
                 </Button>
               </CardContent>
