@@ -2,57 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/* Ohsara Design System - Perplexity-inspired minimalist palette 
+All colors MUST be HSL for consistent theming.
 */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Primary Backgrounds - Soft off-white */
+    --background: 40 14% 97.8%; /* #F9F9F8 */
+    --foreground: 0 0% 20%; /* #333333 - Charcoal gray */
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Card & Popover */
+    --card: 40 14% 97.8%; /* Same as background */
+    --card-foreground: 0 0% 20%;
+    --popover: 40 14% 97.8%;
+    --popover-foreground: 0 0% 20%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    /* Primary - Sophisticated dark teal accent */
+    --primary: 176 23% 37%; /* #3B857E */
+    --primary-foreground: 0 0% 98%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Secondary - Clean backgrounds */
+    --secondary: 45 9% 94.1%; /* #F0F0EE - Sidebar gray */
+    --secondary-foreground: 0 0% 20%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Muted - Subtle variations */
+    --muted: 45 9% 94.1%;
+    --muted-foreground: 0 0% 45%; /* #737373 */
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Accent - Teal variations */
+    --accent: 176 23% 37%;
+    --accent-foreground: 0 0% 98%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Destructive - Professional red */
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 98%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Borders - Very light gray */
+    --border: 0 0% 91.8%; /* #EAEAEA */
+    --input: 0 0% 91.8%;
+    --ring: 176 23% 37%; /* Teal focus ring */
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Border radius */
+    --radius: 0.75rem; /* Slightly more rounded for modern feel */
 
-    --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
+    /* Sidebar - Distinct from main background */
+    --sidebar-background: 45 9% 94.1%; /* #F0F0EE */
+    --sidebar-foreground: 0 0% 20%;
+    --sidebar-primary: 176 23% 37%; /* Teal accent */
     --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 176 23% 95%; /* Very light teal */
+    --sidebar-accent-foreground: 176 23% 25%; /* Dark teal */
+    --sidebar-border: 0 0% 91.8%;
+    --sidebar-ring: 176 23% 37%;
 
-    --sidebar-accent: 240 4.8% 95.9%;
+    /* Loading and progress */
+    --progress-background: 0 0% 91.8%;
+    --progress-foreground: 176 23% 37%;
 
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Subtle shadows */
+    --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    --shadow-medium: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
 
   .dark {
@@ -100,6 +110,37 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-inter;
+  }
+}
+
+@layer components {
+  /* Ohsara-specific component styles */
+  .ohsara-logo {
+    @apply font-medium text-foreground tracking-tight;
+  }
+  
+  .suggestion-pill {
+    @apply px-4 py-2 rounded-full border border-border bg-card hover:bg-secondary/50 
+           text-sm font-medium text-muted-foreground hover:text-foreground 
+           transition-all duration-200 cursor-pointer;
+  }
+  
+  .summary-section {
+    @apply bg-card border border-border rounded-lg p-6 space-y-4;
+  }
+  
+  .loading-bar {
+    @apply h-1 bg-primary rounded-full transition-all duration-300;
+  }
+  
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium
+           text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground
+           transition-colors duration-200;
+  }
+  
+  .nav-item-active {
+    @apply bg-sidebar-accent text-sidebar-accent-foreground;
   }
 }
