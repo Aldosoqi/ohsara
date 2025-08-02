@@ -1,7 +1,35 @@
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { YouTubeInput } from "@/components/YouTubeInput";
 import { SuggestionPills } from "@/components/SuggestionPills";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate("/auth");
+    }
+  }, [user, loading, navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null; // Will redirect to auth
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center px-8">
       <div className="w-full max-w-4xl mx-auto space-y-12">
@@ -47,6 +75,17 @@ const Index = () => {
               Beautifully formatted summaries that are easy to read
             </p>
           </div>
+        </div>
+
+        {/* Sign In Link for testing */}
+        <div className="text-center mt-8">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/auth")}
+            className="text-sm"
+          >
+            Not you? Sign in with different account
+          </Button>
         </div>
       </div>
     </div>
