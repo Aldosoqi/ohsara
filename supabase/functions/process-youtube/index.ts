@@ -335,15 +335,43 @@ function createStreamingResponse(openAIResponse: Response, summary: any, videoMe
   const stream = new ReadableStream({
     async start(controller) {
       const reader = openAIResponse.body?.getReader();
-      if (!reader) return;
+      if (!reader) {
+        controller.close();
+        return;
+      }
 
       let fullContent = '';
+      let streamClosed = false;
       const decoder = new TextDecoder();
+
+      const closeStream = async () => {
+        if (streamClosed) return;
+        streamClosed = true;
+        
+        try {
+          // Update summary with final content
+          if (summary && fullContent) {
+            await supabase
+              .from('summaries')
+              .update({ summary: fullContent })
+              .eq('id', summary.id);
+          }
+          controller.close();
+        } catch (error) {
+          console.error('Error closing stream:', error);
+          if (!streamClosed) {
+            controller.error(error);
+          }
+        }
+      };
 
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            await closeStream();
+            break;
+          }
 
           const chunk = decoder.decode(value);
           const lines = chunk.split('\n');
@@ -352,21 +380,14 @@ function createStreamingResponse(openAIResponse: Response, summary: any, videoMe
             if (line.startsWith('data: ')) {
               const data = line.slice(6);
               if (data === '[DONE]') {
-                // Update summary with final content
-                if (summary && fullContent) {
-                  await supabase
-                    .from('summaries')
-                    .update({ summary: fullContent })
-                    .eq('id', summary.id);
-                }
-                controller.close();
+                await closeStream();
                 return;
               }
 
               try {
                 const parsed = JSON.parse(data);
                 const content = parsed.choices?.[0]?.delta?.content;
-                if (content) {
+                if (content && !streamClosed) {
                   fullContent += content;
                   controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content, videoMetadata, summaryId: summary?.id })}\n\n`));
                 }
@@ -378,7 +399,16 @@ function createStreamingResponse(openAIResponse: Response, summary: any, videoMe
         }
       } catch (error) {
         console.error('Streaming error:', error);
-        controller.error(error);
+        if (!streamClosed) {
+          streamClosed = true;
+          controller.error(error);
+        }
+      } finally {
+        try {
+          await reader.releaseLock();
+        } catch (e) {
+          // Reader might already be released
+        }
       }
     }
   });
