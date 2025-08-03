@@ -219,7 +219,7 @@ function extractVideoId(url: string): string | null {
 
 async function scrapeTranscript(videoId: string): Promise<string | null> {
   try {
-    const apifyUrl = `https://api.apify.com/v2/acts/streamers~youtube-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`;
+    const apifyUrl = `https://api.apify.com/v2/acts/pintostudio~youtube-transcript-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`;
     
     const response = await fetch(apifyUrl, {
       method: 'POST',
@@ -228,8 +228,7 @@ async function scrapeTranscript(videoId: string): Promise<string | null> {
       },
       body: JSON.stringify({
         startUrls: [`https://www.youtube.com/watch?v=${videoId}`],
-        includeTranscript: true,
-        maxResults: 1
+        maxItems: 1
       }),
     });
 
@@ -239,14 +238,20 @@ async function scrapeTranscript(videoId: string): Promise<string | null> {
     }
 
     const data = await response.json();
-    const transcript = data[0]?.transcript;
+    console.log('Apify response:', data);
     
+    if (!data || data.length === 0) {
+      console.log('No data returned from Apify for video:', videoId);
+      return null;
+    }
+
+    const transcript = data[0]?.transcript;
     if (!transcript || transcript.length === 0) {
       console.log('No transcript found for video:', videoId);
       return null;
     }
 
-    return transcript.map((t: any) => t.text).join(' ');
+    return transcript;
   } catch (error) {
     console.error('Error scraping transcript:', error);
     return null;
