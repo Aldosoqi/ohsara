@@ -67,10 +67,11 @@ serve(async (req) => {
     }
 
     // Step 3: Scrape transcript using Apify
-    console.log('Starting transcript extraction...');
+    console.log('Starting transcript extraction for video ID:', videoId);
     const transcript = await scrapeTranscript(videoId);
 
     if (!transcript) {
+      console.log('No transcript found, refunding credit...');
       // Refund credit if no transcript found
       await supabase.rpc('update_user_credits', {
         user_id_param: user.id,
@@ -78,7 +79,13 @@ serve(async (req) => {
         transaction_type_param: 'refund',
         description_param: 'No transcript available - refunded'
       });
-      throw new Error('No transcript or captions available for this video');
+      
+      return new Response(JSON.stringify({ 
+        error: 'No transcript or captions available for this video. Your credit has been refunded.' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Step 4: Get video metadata
@@ -219,39 +226,74 @@ function extractVideoId(url: string): string | null {
 
 async function scrapeTranscript(videoId: string): Promise<string | null> {
   try {
+    console.log('Calling Apify API for video ID:', videoId);
     const apifyUrl = `https://api.apify.com/v2/acts/pintostudio~youtube-transcript-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`;
+    
+    const requestBody = {
+      startUrls: [`https://www.youtube.com/watch?v=${videoId}`],
+      maxItems: 1
+    };
+    
+    console.log('Apify request body:', JSON.stringify(requestBody));
     
     const response = await fetch(apifyUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        startUrls: [`https://www.youtube.com/watch?v=${videoId}`],
-        maxItems: 1
-      }),
+      body: JSON.stringify(requestBody),
     });
 
+    console.log('Apify response status:', response.status);
+    console.log('Apify response headers:', Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      console.error('Apify API error:', response.status);
+      const errorText = await response.text();
+      console.error('Apify API error details:', errorText);
       return null;
     }
 
     const data = await response.json();
-    console.log('Apify response:', data);
+    console.log('Full Apify response data:', JSON.stringify(data, null, 2));
     
     if (!data || data.length === 0) {
-      console.log('No data returned from Apify for video:', videoId);
+      console.log('Empty data array returned from Apify for video:', videoId);
       return null;
     }
 
-    const transcript = data[0]?.transcript;
-    if (!transcript || transcript.length === 0) {
-      console.log('No transcript found for video:', videoId);
+    const firstItem = data[0];
+    console.log('First item structure:', Object.keys(firstItem || {}));
+    console.log('First item data:', JSON.stringify(firstItem, null, 2));
+
+    const transcript = firstItem?.transcript;
+    if (!transcript) {
+      console.log('No transcript property found in response');
       return null;
     }
 
-    return transcript;
+    if (typeof transcript === 'string') {
+      console.log('Transcript is string, length:', transcript.length);
+      return transcript;
+    }
+
+    if (Array.isArray(transcript)) {
+      console.log('Transcript is array, length:', transcript.length);
+      if (transcript.length === 0) {
+        console.log('Transcript array is empty');
+        return null;
+      }
+      
+      // Join array elements if it's an array of objects with text property
+      const joinedTranscript = transcript.map(item => 
+        typeof item === 'string' ? item : item?.text || item
+      ).join(' ');
+      
+      console.log('Joined transcript length:', joinedTranscript.length);
+      return joinedTranscript;
+    }
+
+    console.log('Transcript is neither string nor array:', typeof transcript);
+    return null;
   } catch (error) {
     console.error('Error scraping transcript:', error);
     return null;
