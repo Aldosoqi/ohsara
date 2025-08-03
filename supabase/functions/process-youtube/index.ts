@@ -110,7 +110,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4.1',
+          model: 'gpt-4o',
           messages: [
             {
               role: 'system',
@@ -128,7 +128,9 @@ serve(async (req) => {
       });
 
       if (!openAIResponse.ok) {
-        throw new Error('Failed to analyze content');
+        const errorText = await openAIResponse.text();
+        console.error('OpenAI API error:', errorText);
+        throw new Error(`Failed to analyze content: ${errorText}`);
       }
 
       // Step 6: Save summary to database
@@ -225,7 +227,7 @@ async function processLongTranscript(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -282,7 +284,7 @@ async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, m
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4.1',
+          model: 'gpt-4o',
           messages: [
             {
               role: 'system',
