@@ -91,117 +91,71 @@ serve(async (req) => {
     // Step 4: Get video metadata
     const videoMetadata = await getVideoMetadata(videoId);
 
-    // Step 5: Analyze transcript with OpenAI (streaming)
+    // Step 5: Process transcript (with chunking for long content)
     console.log('Starting AI analysis...');
-    const analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
+    console.log('Transcript length:', transcript.length, 'characters');
     
-    const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert video content analyzer. Provide detailed, well-structured analysis based on the user\'s requirements.'
-          },
-          {
-            role: 'user',
-            content: analysisPrompt
-          }
-        ],
-        stream: true,
-        temperature: 0.7,
-        max_tokens: 4000
-      }),
-    });
-
-    if (!openAIResponse.ok) {
-      throw new Error('Failed to analyze content');
-    }
-
-    // Step 6: Save summary to database
-    const { data: summary, error: summaryError } = await supabase
-      .from('summaries')
-      .insert({
-        user_id: user.id,
-        youtube_url: youtubeUrl,
-        video_title: videoMetadata.title,
-        video_description: videoMetadata.description,
-        thumbnail_url: videoMetadata.thumbnail,
-        duration: videoMetadata.duration,
-        summary: 'Processing...', // Will be updated with actual content
-      })
-      .select()
-      .single();
-
-    if (summaryError) {
-      console.error('Failed to save summary:', summaryError);
-    }
-
-    // Return streaming response
-    const stream = new ReadableStream({
-      async start(controller) {
-        const reader = openAIResponse.body?.getReader();
-        if (!reader) return;
-
-        let fullContent = '';
-        const decoder = new TextDecoder();
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data === '[DONE]') {
-                  // Update summary with final content
-                  if (summary && fullContent) {
-                    await supabase
-                      .from('summaries')
-                      .update({ summary: fullContent })
-                      .eq('id', summary.id);
-                  }
-                  controller.close();
-                  return;
-                }
-
-                try {
-                  const parsed = JSON.parse(data);
-                  const content = parsed.choices?.[0]?.delta?.content;
-                  if (content) {
-                    fullContent += content;
-                    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content, videoMetadata, summaryId: summary?.id })}\n\n`));
-                  }
-                } catch (e) {
-                  // Skip invalid JSON
-                }
-              }
+    const maxChunkSize = 15000; // Characters per chunk
+    let analysisResult = '';
+    
+    if (transcript.length <= maxChunkSize) {
+      // Short transcript - process normally
+      const analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
+      
+      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert video content analyzer. Provide detailed, well-structured analysis based on the user\'s requirements.'
+            },
+            {
+              role: 'user',
+              content: analysisPrompt
             }
-          }
-        } catch (error) {
-          console.error('Streaming error:', error);
-          controller.error(error);
-        }
-      }
-    });
+          ],
+          stream: true,
+          temperature: 0.7,
+          max_tokens: 4000
+        }),
+      });
 
-    return new Response(stream, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
+      if (!openAIResponse.ok) {
+        throw new Error('Failed to analyze content');
+      }
+
+      // Step 6: Save summary to database
+      const { data: summary, error: summaryError } = await supabase
+        .from('summaries')
+        .insert({
+          user_id: user.id,
+          youtube_url: youtubeUrl,
+          video_title: videoMetadata.title,
+          video_description: videoMetadata.description,
+          thumbnail_url: videoMetadata.thumbnail,
+          duration: videoMetadata.duration,
+          summary: 'Processing...', // Will be updated with actual content
+        })
+        .select()
+        .single();
+
+      if (summaryError) {
+        console.error('Failed to save summary:', summaryError);
+      }
+
+      // Return streaming response for short content
+      return createStreamingResponse(openAIResponse, summary, videoMetadata, supabase);
+    } else {
+      // Long transcript - use chunking
+      console.log('Long transcript detected, using chunking approach...');
+      return await processLongTranscript(transcript, analysisType, customRequest, videoMetadata, user, youtubeUrl, supabase);
+    }
 
   } catch (error) {
     console.error('Error in process-youtube function:', error);
@@ -211,6 +165,257 @@ serve(async (req) => {
     });
   }
 });
+
+async function processLongTranscript(
+  transcript: string, 
+  analysisType: string, 
+  customRequest: string, 
+  videoMetadata: any, 
+  user: any, 
+  youtubeUrl: string, 
+  supabase: any
+) {
+  console.log('Processing long transcript with chunking...');
+  
+  const maxChunkSize = 15000;
+  const chunks = splitTranscriptIntoChunks(transcript, maxChunkSize);
+  console.log(`Split transcript into ${chunks.length} chunks`);
+  
+  let combinedAnalysis = '';
+  let chunkAnalyses: string[] = [];
+  
+  // Process each chunk
+  for (let i = 0; i < chunks.length; i++) {
+    console.log(`Processing chunk ${i + 1}/${chunks.length}...`);
+    
+    const chunkPrompt = buildChunkAnalysisPrompt(analysisType, customRequest, chunks[i], i + 1, chunks.length);
+    
+    const chunkResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert video content analyzer. Analyze this chunk of content and provide detailed insights.'
+          },
+          {
+            role: 'user',
+            content: chunkPrompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000
+      }),
+    });
+    
+    if (chunkResponse.ok) {
+      const chunkData = await chunkResponse.json();
+      const chunkAnalysis = chunkData.choices?.[0]?.message?.content || '';
+      chunkAnalyses.push(chunkAnalysis);
+    }
+  }
+  
+  // Combine all chunk analyses
+  const finalPrompt = buildFinalCombinationPrompt(analysisType, customRequest, chunkAnalyses);
+  
+  const finalResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert video content analyzer. Combine and synthesize the chunk analyses into a comprehensive final analysis.'
+        },
+        {
+          role: 'user',
+          content: finalPrompt
+        }
+      ],
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 4000
+    }),
+  });
+  
+  if (!finalResponse.ok) {
+    throw new Error('Failed to analyze content');
+  }
+  
+  // Save summary to database
+  const { data: summary, error: summaryError } = await supabase
+    .from('summaries')
+    .insert({
+      user_id: user.id,
+      youtube_url: youtubeUrl,
+      video_title: videoMetadata.title,
+      video_description: videoMetadata.description,
+      thumbnail_url: videoMetadata.thumbnail,
+      duration: videoMetadata.duration,
+      summary: 'Processing...', // Will be updated with actual content
+    })
+    .select()
+    .single();
+
+  if (summaryError) {
+    console.error('Failed to save summary:', summaryError);
+  }
+  
+  return createStreamingResponse(finalResponse, summary, videoMetadata, supabase);
+}
+
+function createStreamingResponse(openAIResponse: Response, summary: any, videoMetadata: any, supabase: any) {
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = openAIResponse.body?.getReader();
+      if (!reader) return;
+
+      let fullContent = '';
+      const decoder = new TextDecoder();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') {
+                // Update summary with final content
+                if (summary && fullContent) {
+                  await supabase
+                    .from('summaries')
+                    .update({ summary: fullContent })
+                    .eq('id', summary.id);
+                }
+                controller.close();
+                return;
+              }
+
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) {
+                  fullContent += content;
+                  controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content, videoMetadata, summaryId: summary?.id })}\n\n`));
+                }
+              } catch (e) {
+                // Skip invalid JSON
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Streaming error:', error);
+        controller.error(error);
+      }
+    }
+  });
+
+  return new Response(stream, {
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}
+
+function splitTranscriptIntoChunks(transcript: string, maxChunkSize: number): string[] {
+  const chunks: string[] = [];
+  const sentences = transcript.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  
+  let currentChunk = '';
+  
+  for (const sentence of sentences) {
+    const potentialChunk = currentChunk + sentence + '. ';
+    
+    if (potentialChunk.length > maxChunkSize && currentChunk.length > 0) {
+      chunks.push(currentChunk.trim());
+      currentChunk = sentence + '. ';
+    } else {
+      currentChunk = potentialChunk;
+    }
+  }
+  
+  if (currentChunk.trim().length > 0) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  return chunks;
+}
+
+function buildChunkAnalysisPrompt(analysisType: string, customRequest: string, chunk: string, chunkNumber: number, totalChunks: number): string {
+  const basePrompt = `Analyze this section (part ${chunkNumber} of ${totalChunks}) of a video transcript:\n\n${chunk}\n\n`;
+  
+  switch (analysisType) {
+    case 'summary':
+      return basePrompt + 'Extract the key points and main ideas from this section. Focus on the most important information.';
+    
+    case 'key-takeaways':
+      return basePrompt + 'Identify any important takeaways, insights, or lessons from this section.';
+    
+    case 'step-by-step':
+      return basePrompt + 'Identify any steps, processes, or methodologies mentioned in this section.';
+    
+    case 'general-explanation':
+      return basePrompt + 'Explain the main concepts and topics discussed in this section.';
+    
+    case 'tech-review':
+      return basePrompt + 'Provide technical analysis for this section, including details, pros/cons, and insights.';
+    
+    case 'custom':
+      return basePrompt + `Focus on this specific request: "${customRequest}". Extract any information from this section that relates to this request.`;
+    
+    default:
+      return basePrompt + 'Analyze the main content and themes in this section.';
+  }
+}
+
+function buildFinalCombinationPrompt(analysisType: string, customRequest: string, chunkAnalyses: string[]): string {
+  const combinedAnalyses = chunkAnalyses.map((analysis, index) => 
+    `--- Section ${index + 1} Analysis ---\n${analysis}\n`
+  ).join('\n');
+  
+  const basePrompt = `I have analyzed a long video transcript in sections. Here are the individual section analyses:\n\n${combinedAnalyses}\n\n`;
+  
+  switch (analysisType) {
+    case 'summary':
+      return basePrompt + 'Please combine these section analyses into a comprehensive, well-structured summary of the entire video. Organize the content logically and highlight the most important points.';
+    
+    case 'key-takeaways':
+      return basePrompt + 'Please combine these section analyses and extract the most important key takeaways and insights from the entire video. Present them as a clear, organized list.';
+    
+    case 'step-by-step':
+      return basePrompt + 'Please combine these section analyses and create a comprehensive step-by-step breakdown of all processes and methodologies mentioned throughout the video.';
+    
+    case 'general-explanation':
+      return basePrompt + 'Please combine these section analyses into a clear, comprehensive explanation of all concepts and topics discussed in the video.';
+    
+    case 'tech-review':
+      return basePrompt + 'Please combine these section analyses into a comprehensive technical review of the entire video content, including all technical details, pros/cons, and expert insights.';
+    
+    case 'custom':
+      return basePrompt + `Please combine these section analyses to provide a comprehensive response to this specific request: "${customRequest}". Focus on synthesizing all relevant information from across the video to address what was asked for.`;
+    
+    default:
+      return basePrompt + 'Please combine these section analyses into a comprehensive analysis of the entire video content.';
+  }
+}
 
 function extractVideoId(url: string): string | null {
   const patterns = [
