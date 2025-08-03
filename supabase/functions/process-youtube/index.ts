@@ -132,11 +132,11 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o', // Using the most advanced model for better analysis
         messages: [
           {
             role: 'system',
-            content: 'You are an expert video content analyzer. Provide detailed, well-structured analysis based on the user\'s requirements.'
+            content: 'You are an expert video content analyzer with deep expertise in multiple domains. Provide detailed, well-structured, and insightful analysis based on the user\'s requirements. Use proper formatting with headers, bullet points, and clear structure for readability.'
           },
           {
             role: 'user',
@@ -144,7 +144,7 @@ serve(async (req) => {
           }
         ],
         stream: true,
-        temperature: 0.7,
+        temperature: 0.3, // Lower temperature for more focused, accurate analysis
         max_tokens: 4000
       }),
     });
@@ -315,9 +315,6 @@ async function scrapeTranscript(videoId: string): Promise<string | null> {
     console.log('First 200 characters:', joinedTranscript.substring(0, 200));
     
     return joinedTranscript;
-
-    console.log('Transcript is neither string nor array:', typeof transcript);
-    return null;
   } catch (error) {
     console.error('Error scraping transcript:', error);
     return null;
@@ -388,11 +385,22 @@ interface RAGDocument {
 }
 
 async function createRAGStore(transcript: string, chunkSize: number): Promise<RAGDocument[]> {
-  const documents: RAGDocument[] = [];
   const totalLength = transcript.length;
-  
-  // Split transcript into overlapping chunks
   const overlap = Math.floor(chunkSize * 0.1); // 10% overlap
+  
+  // First pass: create chunks and extract metadata
+  const chunksData: Array<{
+    content: string;
+    chunkIndex: number;
+    position: 'beginning' | 'middle' | 'end';
+    timestamp: string;
+    topics: string[];
+    entities: string[];
+    wordCount: number;
+  }> = [];
+  
+  const texts: string[] = [];
+  
   for (let i = 0; i < transcript.length; i += chunkSize - overlap) {
     const chunk = transcript.substring(i, i + chunkSize);
     if (chunk.trim().length < 100) continue; // Skip very small chunks
@@ -406,52 +414,147 @@ async function createRAGStore(transcript: string, chunkSize: number): Promise<RA
     const entities = extractEntities(chunk);
     const timestamp = estimateTimestamp(i, totalLength);
     
-    // Create embedding for semantic search
-    const embedding = await createEmbedding(chunk);
-    
-    documents.push({
+    chunksData.push({
       content: chunk,
-      embedding,
-      metadata: {
-        chunkIndex,
-        position,
-        timestamp,
-        topics,
-        entities,
-        wordCount: chunk.split(' ').length
-      }
+      chunkIndex,
+      position,
+      timestamp,
+      topics,
+      entities,
+      wordCount: chunk.split(' ').length
     });
+    
+    texts.push(chunk);
   }
+  
+  console.log(`Processing ${texts.length} chunks for embeddings...`);
+  
+  // Second pass: create embeddings in batches for efficiency
+  const embeddings = await createEmbeddingsBatch(texts);
+  
+  // Combine chunks with embeddings
+  const documents: RAGDocument[] = chunksData.map((chunkData, index) => ({
+    content: chunkData.content,
+    embedding: embeddings[index] || Array(1024).fill(0),
+    metadata: {
+      chunkIndex: chunkData.chunkIndex,
+      position: chunkData.position,
+      timestamp: chunkData.timestamp,
+      topics: chunkData.topics,
+      entities: chunkData.entities,
+      wordCount: chunkData.wordCount
+    }
+  }));
   
   return documents;
 }
 
-async function createEmbedding(text: string): Promise<number[]> {
-  try {
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: text.substring(0, 8000), // Limit input size
-        encoding_format: 'float'
-      }),
-    });
-    
-    if (!response.ok) {
-      console.error('Embedding API error:', response.status);
-      return Array(1536).fill(0); // Return zero vector as fallback
+async function createEmbedding(text: string, retries = 3): Promise<number[]> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'text-embedding-3-large', // Most advanced embedding model
+          input: text.substring(0, 8000), // Limit input size
+          encoding_format: 'float',
+          dimensions: 1024 // Optimize for performance while maintaining quality
+        }),
+      });
+      
+      if (response.status === 429) {
+        // Rate limit hit - exponential backoff
+        const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s delays
+        console.log(`Rate limit hit, retrying in ${delay}ms (attempt ${attempt + 1}/${retries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      if (!response.ok) {
+        console.error('Embedding API error:', response.status, await response.text());
+        if (attempt === retries - 1) {
+          return Array(1024).fill(0); // Return zero vector as fallback
+        }
+        continue;
+      }
+      
+      const data = await response.json();
+      return data.data[0].embedding;
+    } catch (error) {
+      console.error(`Error creating embedding (attempt ${attempt + 1}):`, error);
+      if (attempt === retries - 1) {
+        return Array(1024).fill(0); // Return zero vector as fallback
+      }
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
     }
-    
-    const data = await response.json();
-    return data.data[0].embedding;
-  } catch (error) {
-    console.error('Error creating embedding:', error);
-    return Array(1536).fill(0); // Return zero vector as fallback
   }
+  return Array(1024).fill(0);
+}
+
+// Batch embedding creation to avoid rate limits
+async function createEmbeddingsBatch(texts: string[]): Promise<number[][]> {
+  const batchSize = 100; // OpenAI allows up to 2048 inputs per request
+  const embeddings: number[][] = [];
+  
+  for (let i = 0; i < texts.length; i += batchSize) {
+    const batch = texts.slice(i, i + batchSize);
+    console.log(`Processing embedding batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(texts.length/batchSize)}`);
+    
+    try {
+      const response = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'text-embedding-3-large',
+          input: batch.map(text => text.substring(0, 8000)),
+          encoding_format: 'float',
+          dimensions: 1024
+        }),
+      });
+      
+      if (response.status === 429) {
+        // Rate limit - wait and retry with exponential backoff
+        const delay = Math.min(30000, Math.pow(2, Math.floor(i/batchSize)) * 2000);
+        console.log(`Rate limit hit, waiting ${delay}ms before retry`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        i -= batchSize; // Retry this batch
+        continue;
+      }
+      
+      if (!response.ok) {
+        console.error('Batch embedding error:', response.status, await response.text());
+        // Fill with zero vectors for failed batch
+        for (let j = 0; j < batch.length; j++) {
+          embeddings.push(Array(1024).fill(0));
+        }
+        continue;
+      }
+      
+      const data = await response.json();
+      embeddings.push(...data.data.map((item: any) => item.embedding));
+      
+      // Small delay between batches to avoid rate limits
+      if (i + batchSize < texts.length) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    } catch (error) {
+      console.error('Batch embedding error:', error);
+      // Fill with zero vectors for failed batch
+      for (let j = 0; j < batch.length; j++) {
+        embeddings.push(Array(1024).fill(0));
+      }
+    }
+  }
+  
+  return embeddings;
 }
 
 function extractTopics(text: string): string[] {
