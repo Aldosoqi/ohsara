@@ -107,11 +107,24 @@ const History = () => {
           </div>
           
           <div className="bg-card border border-border rounded-xl p-8">
-            <h2 className="text-xl font-semibold text-foreground mb-4">Summary</h2>
-            <div className="prose prose-sm max-w-none">
-              <p className="text-foreground whitespace-pre-wrap leading-relaxed">
-                {selectedSummary.summary}
-              </p>
+            <h2 className="text-xl font-semibold text-foreground mb-6">Summary</h2>
+            <div className="prose prose-lg max-w-none text-foreground">
+              <div 
+                className="formatted-content space-y-4"
+                dangerouslySetInnerHTML={{
+                  __html: selectedSummary.summary
+                    .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-foreground mt-6 mb-3">$1</h3>')
+                    .replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-foreground mt-8 mb-4">$1</h2>')
+                    .replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-foreground mt-10 mb-5">$1</h1>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-foreground">$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
+                    .replace(/^[-•] (.*$)/gm, '<li class="ml-4 mb-1">$1</li>')
+                    .replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4 mb-1 list-decimal">$2</li>')
+                    .replace(/\n\n/g, '</p><p class="mb-4">')
+                    .replace(/^(?!<[h|l|s|e])/gm, '<p class="mb-4">')
+                    .replace(/<\/p><p class="mb-4">(?=<[h|l])/g, '</p>')
+                }}
+              />
             </div>
           </div>
         </div>
