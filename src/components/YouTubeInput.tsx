@@ -34,6 +34,12 @@ export function YouTubeInput() {
     e.preventDefault();
     if (!selectedOption) return;
 
+    // Clear previous results before starting new request
+    setStreamingContent("");
+    setFinalResult("");
+    setVideoMetadata(null);
+    setError("");
+
     setIsLoading(true);
     setStep("processing");
     
