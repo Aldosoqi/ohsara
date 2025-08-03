@@ -60,6 +60,19 @@ export function YouTubeInput() {
           .maybeSingle();
 
         if (incompleteSummary) {
+          // Check if there's already a completed summary for this URL
+          const existingCompletedSummary = await checkExistingSummary(incompleteSummary.youtube_url);
+          
+          if (existingCompletedSummary) {
+            console.log('Found completed summary for this URL, cleaning up incomplete request');
+            // Delete the incomplete request since we have a completed one
+            await supabase
+              .from('summaries')
+              .delete()
+              .eq('id', incompleteSummary.id);
+            return;
+          }
+
           // Check if the request is recent (within last 10 minutes)
           const requestTime = new Date(incompleteSummary.created_at).getTime();
           const now = new Date().getTime();
