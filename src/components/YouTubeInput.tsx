@@ -44,6 +44,23 @@ export function YouTubeInput() {
           .maybeSingle();
 
         if (incompleteSummary) {
+          // Check if the request is recent (within last 10 minutes) to avoid processing old stuck records
+          const requestTime = new Date(incompleteSummary.created_at).getTime();
+          const now = new Date().getTime();
+          const tenMinutesAgo = now - (10 * 60 * 1000);
+          
+          if (requestTime < tenMinutesAgo) {
+            console.log('Found old incomplete request, cleaning up to avoid duplicate processing');
+            // Delete old incomplete request to prevent future duplicates
+            await supabase
+              .from('summaries')
+              .delete()
+              .eq('id', incompleteSummary.id);
+            return;
+          }
+          
+          console.log('Found recent incomplete request, resuming...', incompleteSummary);
+          
           // Resume the incomplete request
           setUrl(incompleteSummary.youtube_url);
           setCurrentSummaryId(incompleteSummary.id);
