@@ -296,12 +296,20 @@ async function scrapeTranscript(videoId: string): Promise<string | null> {
 
 async function getVideoMetadata(videoId: string) {
   try {
-    // Use YouTube API or scraping to get metadata
-    // For now, return basic structure
+    // Use oEmbed API to get real YouTube metadata
+    const oEmbedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+    
+    const response = await fetch(oEmbedUrl);
+    if (!response.ok) {
+      throw new Error('Failed to fetch metadata');
+    }
+    
+    const data = await response.json();
+    
     return {
-      title: 'Video Title',
-      description: 'Video Description',
-      thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      title: data.title || 'Unknown Title',
+      description: data.author_name || '',
+      thumbnail: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
       duration: 0
     };
   } catch (error) {
