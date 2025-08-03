@@ -42,25 +42,25 @@ export function YouTubeInput() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Check for incomplete requests on mount
+  // Check for existing requests on mount and before new requests
   useEffect(() => {
-    const checkIncompleteRequest = async () => {
+    const checkExistingRequests = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user?.id) return;
 
-        // Get the most recent incomplete summary
+        // Get the most recent incomplete summary (empty or null summary)
         const { data: incompleteSummary } = await supabase
           .from('summaries')
           .select('*')
           .eq('user_id', session.user.id)
-          .eq('summary', '') // Check for empty string instead of null
+          .or('summary.eq.,summary.is.null')
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
         if (incompleteSummary) {
-          // Check if the request is recent (within last 10 minutes) to avoid processing old stuck records
+          // Check if the request is recent (within last 10 minutes)
           const requestTime = new Date(incompleteSummary.created_at).getTime();
           const now = new Date().getTime();
           const tenMinutesAgo = now - (10 * 60 * 1000);
@@ -96,12 +96,36 @@ export function YouTubeInput() {
           await continueProcessing(incompleteSummary.youtube_url, incompleteSummary.id);
         }
       } catch (error) {
-        console.error('Error checking incomplete requests:', error);
+        console.error('Error checking existing requests:', error);
       }
     };
 
-    checkIncompleteRequest();
+    checkExistingRequests();
   }, []);
+
+  // Function to check if URL already has a completed summary
+  const checkExistingSummary = async (youtubeUrl: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return null;
+
+      const { data: existingSummary } = await supabase
+        .from('summaries')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .eq('youtube_url', youtubeUrl)
+        .not('summary', 'eq', '')
+        .not('summary', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      return existingSummary;
+    } catch (error) {
+      console.error('Error checking existing summary:', error);
+      return null;
+    }
+  };
 
   const continueProcessing = async (youtubeUrl: string, summaryId: string) => {
     try {
@@ -193,6 +217,19 @@ export function YouTubeInput() {
   const handleAnalysisSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOption) return;
+
+    // Check if this URL already has a completed summary
+    const existingSummary = await checkExistingSummary(url);
+    if (existingSummary) {
+      // Show existing summary instead of creating a new one
+      setFinalResult(existingSummary.summary);
+      setVideoMetadata({
+        title: existingSummary.video_title,
+        thumbnail: existingSummary.thumbnail_url
+      });
+      setStep("results");
+      return;
+    }
 
     // Clear previous results before starting new request
     setStreamingContent("");
