@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Play, Loader2, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useSettings } from "@/hooks/useSettings";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const analysisOptions = [
   { id: "summary", label: "Summary", description: "Get a concise overview of the main points" },
@@ -15,6 +17,9 @@ const analysisOptions = [
 ];
 
 export function YouTubeInput() {
+  const { requestNotifications } = useSettings();
+  const { showRequestCompleteNotification } = useNotifications();
+  
   const [url, setUrl] = useState("");
   const [step, setStep] = useState<"url" | "options" | "processing" | "results">("url");
   const [selectedOption, setSelectedOption] = useState("");
@@ -25,6 +30,17 @@ export function YouTubeInput() {
   const [videoMetadata, setVideoMetadata] = useState<any>(null);
   const [error, setError] = useState("");
   const [currentSummaryId, setCurrentSummaryId] = useState<string | null>(null);
+  const [pageVisible, setPageVisible] = useState(true);
+
+  // Track page visibility for notifications
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setPageVisible(!document.hidden);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   // Check for incomplete requests on mount
   useEffect(() => {
@@ -155,6 +171,11 @@ export function YouTubeInput() {
       setFinalResult(result);
       setStep("results");
       setIsLoading(false);
+      
+      // Show notification if user left the page during processing
+      if (!pageVisible && requestNotifications) {
+        showRequestCompleteNotification(videoMetadata?.title);
+      }
     } catch (error) {
       console.error('Error continuing processing:', error);
       setStep("processing");
@@ -270,6 +291,11 @@ export function YouTubeInput() {
       setFinalResult(result);
       setStep("results");
       setIsLoading(false);
+      
+      // Show notification if user left the page during processing
+      if (!pageVisible && requestNotifications) {
+        showRequestCompleteNotification(videoMetadata?.title);
+      }
     } catch (error) {
       console.error('Error processing video:', error);
       

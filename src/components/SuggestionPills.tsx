@@ -1,3 +1,9 @@
+import { Badge } from "@/components/ui/badge";
+
+interface SuggestionPillsProps {
+  onSuggestionClick?: (url: string) => void;
+}
+
 const suggestions = [
   "Summarize a Lecture",
   "Explain a Tutorial", 
@@ -7,23 +13,23 @@ const suggestions = [
   "Tech Reviews"
 ];
 
-export function SuggestionPills() {
+export const SuggestionPills = ({ onSuggestionClick }: SuggestionPillsProps) => {
   const handleSuggestionClick = (suggestion: string) => {
-    // TODO: Implement suggestion handling
-    console.log("Suggestion clicked:", suggestion);
+    onSuggestionClick?.(suggestion);
   };
 
   return (
     <div className="flex flex-wrap gap-3 justify-center">
-      {suggestions.map((suggestion) => (
-        <button
-          key={suggestion}
+      {suggestions.map((suggestion, index) => (
+        <Badge
+          key={index}
+          variant="secondary"
+          className="cursor-pointer hover:bg-accent transition-colors"
           onClick={() => handleSuggestionClick(suggestion)}
-          className="suggestion-pill"
         >
           {suggestion}
-        </button>
+        </Badge>
       ))}
     </div>
   );
-}
+};

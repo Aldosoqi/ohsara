@@ -10,12 +10,31 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
+import { useSettings } from "@/hooks/useSettings";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 const Account = () => {
   const { user, profile, signOut, refreshProfile } = useAuth();
+  const {
+    appearance,
+    setAppearance,
+    language,
+    setLanguage,
+    responseLanguage,
+    setResponseLanguage,
+    autosuggest,
+    setAutosuggest,
+    homepageWidgets,
+    setHomepageWidgets,
+    requestNotifications,
+    setRequestNotifications,
+    emailNotifications,
+    setEmailNotifications,
+    pushNotifications,
+    setPushNotifications,
+  } = useSettings();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
@@ -24,18 +43,6 @@ const Account = () => {
   const [saving, setSaving] = useState(false);
   const [currentSection, setCurrentSection] = useState("account");
   const [deleting, setDeleting] = useState(false);
-  
-  // Preferences state
-  const [appearance, setAppearance] = useState("system");
-  const [language, setLanguage] = useState("american-english");
-  const [responseLanguage, setResponseLanguage] = useState("automatic");
-  const [autosuggest, setAutosuggest] = useState(true);
-  const [homepageWidgets, setHomepageWidgets] = useState(true);
-  
-  // Notifications state
-  const [requestNotifications, setRequestNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(false);
-  const [pushNotifications, setPushNotifications] = useState(true);
 
   const handleSave = async () => {
     if (!user) return;
