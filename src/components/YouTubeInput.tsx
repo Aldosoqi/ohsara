@@ -99,10 +99,24 @@ export function YouTubeInput() {
       setStep("results");
     } catch (error) {
       console.error('Error processing video:', error);
-      setError(error.message);
-      setStep("options");
-    } finally {
+      
+      // Show simple error message and stay on processing step
+      setStep("processing");
+      setStreamingContent("Sorry, there are too many requests. Please try again later. Your credit has been refunded.");
       setIsLoading(false);
+      
+      // Refund credit automatically in the background
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        await supabase.rpc('update_user_credits', {
+          user_id_param: (await supabase.auth.getSession()).data.session?.user?.id,
+          credit_amount: 1,
+          transaction_type_param: 'refund',
+          description_param: 'Too many requests - refunded'
+        });
+      } catch (refundError) {
+        console.error('Failed to refund credit:', refundError);
+      }
     }
   };
 
@@ -307,11 +321,6 @@ export function YouTubeInput() {
         </div>
       ) : null}
 
-      {error && (
-        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
-          <p className="text-destructive text-sm">{error}</p>
-        </div>
-      )}
 
       {/* Loading progress bar */}
       {isLoading && (
