@@ -103,6 +103,7 @@ export function YouTubeInput() {
 
       setFinalResult(result);
       setStep("results");
+      setIsLoading(false);
     } catch (error) {
       console.error('Error processing video:', error);
       
@@ -130,6 +131,11 @@ export function YouTubeInput() {
     setStep("url");
     setSelectedOption("");
     setCustomRequest("");
+    setIsLoading(false); // Reset loading state when going back
+    setStreamingContent("");
+    setFinalResult("");
+    setVideoMetadata(null);
+    setError("");
   };
 
   const isValidUrl = url.includes("youtube.com") || url.includes("youtu.be");
