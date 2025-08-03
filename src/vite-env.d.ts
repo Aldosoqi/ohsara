@@ -5,3 +5,5 @@ declare global {
     paypal: any;
   }
 }
+
+export {};
