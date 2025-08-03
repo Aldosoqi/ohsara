@@ -228,8 +228,12 @@ export function YouTubeInput() {
   };
 
   const handleAnalysisSubmit = async (e: React.FormEvent) => {
+    console.log('🔥 handleAnalysisSubmit called!', { selectedOption, url, isLoading });
     e.preventDefault();
-    if (!selectedOption) return;
+    if (!selectedOption) {
+      console.log('❌ No option selected, returning early');
+      return;
+    }
 
     // Check if this URL already has a completed summary
     const existingSummary = await checkExistingSummary(url);
@@ -500,6 +504,7 @@ export function YouTubeInput() {
               type="submit"
               disabled={!selectedOption || isLoading || (selectedOption === "custom" && !customRequest.trim())}
               className="w-full h-12 text-lg font-medium"
+              onClick={() => console.log('🔲 Button clicked!', { selectedOption, disabled: !selectedOption || isLoading })}
             >
               {isLoading ? (
                 <>
