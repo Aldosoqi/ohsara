@@ -184,42 +184,24 @@ async function processLongTranscript(
   let combinedAnalysis = '';
   let chunkAnalyses: string[] = [];
   
-  // Process each chunk
+  // Process each chunk with rate limiting
   for (let i = 0; i < chunks.length; i++) {
     console.log(`Processing chunk ${i + 1}/${chunks.length}...`);
     
     const chunkPrompt = buildChunkAnalysisPrompt(analysisType, customRequest, chunks[i], i + 1, chunks.length);
     
-    const chunkResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert video content analyzer. Analyze this chunk of content and provide detailed insights.'
-          },
-          {
-            role: 'user',
-            content: chunkPrompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000
-      }),
-    });
+    // Add delay between requests to respect rate limits (except for first request)
+    if (i > 0) {
+      console.log('Waiting 20 seconds to respect rate limits...');
+      await new Promise(resolve => setTimeout(resolve, 20000));
+    }
     
-    if (chunkResponse.ok) {
-      const chunkData = await chunkResponse.json();
-      const chunkAnalysis = chunkData.choices?.[0]?.message?.content || '';
+    const chunkAnalysis = await processChunkWithRetry(chunkPrompt, i + 1);
+    if (chunkAnalysis) {
       chunkAnalyses.push(chunkAnalysis);
       console.log(`Chunk ${i + 1} processed successfully`);
     } else {
-      console.error(`Failed to process chunk ${i + 1}:`, await chunkResponse.text());
+      console.error(`Failed to process chunk ${i + 1} after retries`);
       chunkAnalyses.push(`[Error processing chunk ${i + 1}]`);
     }
   }
@@ -284,6 +266,69 @@ async function processLongTranscript(
   }
   
   return createStreamingResponse(finalResponse, summary, videoMetadata, supabase);
+}
+
+async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, maxRetries: number = 3): Promise<string | null> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Attempting to process chunk ${chunkNumber}, attempt ${attempt}/${maxRetries}`);
+      
+      const chunkResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert video content analyzer. Analyze this chunk of content and provide detailed insights.'
+            },
+            {
+              role: 'user',
+              content: chunkPrompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        }),
+      });
+
+      if (chunkResponse.ok) {
+        const chunkData = await chunkResponse.json();
+        const chunkAnalysis = chunkData.choices?.[0]?.message?.content || '';
+        return chunkAnalysis;
+      } else {
+        const errorText = await chunkResponse.text();
+        console.error(`Chunk ${chunkNumber} attempt ${attempt} failed:`, errorText);
+        
+        // Check if it's a rate limit error
+        if (errorText.includes('rate_limit_exceeded') && attempt < maxRetries) {
+          const waitTime = Math.min(60000, 20000 * attempt); // Exponential backoff, max 1 minute
+          console.log(`Rate limit hit, waiting ${waitTime/1000} seconds before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+        
+        // For other errors or final attempt, return null
+        if (attempt === maxRetries) {
+          return null;
+        }
+      }
+    } catch (error) {
+      console.error(`Chunk ${chunkNumber} attempt ${attempt} error:`, error);
+      if (attempt === maxRetries) {
+        return null;
+      }
+      
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+  
+  return null;
 }
 
 function createStreamingResponse(openAIResponse: Response, summary: any, videoMetadata: any, supabase: any) {
