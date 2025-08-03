@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect, useRef } from "react";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 const Upgrade = () => {
   const { user } = useAuth();
   const paypalContainerRef = useRef<HTMLDivElement>(null);
+  const [packQuantity, setPackQuantity] = useState(1);
 
   useEffect(() => {
     // Load PayPal SDK
@@ -26,7 +27,7 @@ const Upgrade = () => {
         document.head.removeChild(existingScript);
       }
     };
-  }, [user]);
+  }, [user, packQuantity]);
 
   const initializePayPalButton = () => {
     if (!window.paypal || !paypalContainerRef.current) return;
@@ -49,7 +50,7 @@ const Upgrade = () => {
         
         return actions.subscription.create({
           plan_id: 'P-75K99845G8875640KNCHOMJQ',
-          quantity: 1
+          quantity: packQuantity
         });
       },
       onApprove: async function(data: any, actions: any) {
@@ -57,7 +58,8 @@ const Upgrade = () => {
           const { error } = await supabase.functions.invoke('handle-paypal-subscription', {
             body: { 
               subscriptionID: data.subscriptionID,
-              userId: user?.id 
+              userId: user?.id,
+              quantity: packQuantity
             }
           });
 
@@ -91,14 +93,15 @@ const Upgrade = () => {
     },
     {
       name: "Pay For What You Use",
-      price: "$10",
-      description: "per 100 video summaries",
+      price: `$${10 * packQuantity}`,
+      description: `per ${100 * packQuantity} video summaries monthly`,
       features: [
-        "100 video summaries per month",
+        `${100 * packQuantity} video summaries per month`,
         "Export as TXT/PDF",
         "Save Summaries to Storage", 
         "AI Chat Interface for Follow-up Questions",
-        "Auto-renewal (cancel anytime)"
+        "Auto-renewal (cancel anytime)",
+        "Credits carry over if unused"
       ],
       buttonText: "Subscribe Now",
       isFree: false
@@ -131,6 +134,29 @@ const Upgrade = () => {
               </CardHeader>
               
               <CardContent className="space-y-6">
+                {!plan.isFree && (
+                  <div className="flex items-center justify-center gap-4 p-4 bg-muted rounded-lg">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPackQuantity(Math.max(1, packQuantity - 1))}
+                      disabled={packQuantity <= 1}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <span className="text-lg font-medium">
+                      {packQuantity} × 100 videos
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPackQuantity(packQuantity + 1)}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                
                 <ul className="space-y-3">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-center gap-3">

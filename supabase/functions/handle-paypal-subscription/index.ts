@@ -27,7 +27,7 @@ serve(async (req) => {
       throw new Error("User not authenticated");
     }
 
-    const { subscriptionID, userId } = await req.json();
+    const { subscriptionID, userId, quantity = 1 } = await req.json();
 
     if (!subscriptionID) {
       throw new Error("Subscription ID is required");
@@ -69,24 +69,25 @@ serve(async (req) => {
         { auth: { persistSession: false } }
       );
 
-      // Create or update subscription record (you may need to create a subscriptions table)
-      // For now, let's add 100 credits as specified in the plan
+      // Add credits based on quantity (100 credits per pack)
+      const creditsToAdd = 100 * quantity;
+      
       await supabaseService.rpc("update_user_credits", {
         user_id_param: user.id,
-        credit_amount: 100,
+        credit_amount: creditsToAdd,
         transaction_type_param: "subscription",
-        description_param: `PayPal subscription activated: ${subscriptionID}`,
+        description_param: `PayPal subscription activated: ${subscriptionID} (${quantity} packs)`,
         reference_id_param: null,
       });
 
-      // Log the subscription for tracking
-      console.log(`Subscription ${subscriptionID} activated for user ${user.id}`);
+      console.log(`Subscription ${subscriptionID} activated for user ${user.id} with ${creditsToAdd} credits (${quantity} packs)`);
 
       return new Response(
         JSON.stringify({ 
           success: true, 
           subscriptionId: subscriptionID,
-          credits: 100 
+          credits: creditsToAdd,
+          quantity: quantity
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
