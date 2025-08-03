@@ -15,10 +15,14 @@ const analysisOptions = [
 
 export function YouTubeInput() {
   const [url, setUrl] = useState("");
-  const [step, setStep] = useState<"url" | "options">("url");
+  const [step, setStep] = useState<"url" | "options" | "processing" | "results">("url");
   const [selectedOption, setSelectedOption] = useState("");
   const [customRequest, setCustomRequest] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
+  const [finalResult, setFinalResult] = useState("");
+  const [videoMetadata, setVideoMetadata] = useState<any>(null);
+  const [error, setError] = useState("");
 
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,12 +35,63 @@ export function YouTubeInput() {
     if (!selectedOption) return;
 
     setIsLoading(true);
+    setStep("processing");
     
-    // TODO: Implement YouTube URL processing with selected analysis type
-    setTimeout(() => {
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      
+      const response = await supabase.functions.invoke('process-youtube', {
+        body: {
+          youtubeUrl: url,
+          analysisType: selectedOption,
+          customRequest: customRequest
+        }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      // Handle streaming response
+      const reader = response.data.getReader();
+      const decoder = new TextDecoder();
+      let result = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                result += parsed.content;
+                setStreamingContent(result);
+              }
+              if (parsed.videoMetadata) {
+                setVideoMetadata(parsed.videoMetadata);
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+
+      setFinalResult(result);
+      setStep("results");
+    } catch (error) {
+      console.error('Error processing video:', error);
+      setError(error.message);
+      setStep("options");
+    } finally {
       setIsLoading(false);
-      console.log("Processing URL:", url, "Analysis type:", selectedOption, "Custom request:", customRequest);
-    }, 2000);
+    }
   };
 
   const goBack = () => {
@@ -87,7 +142,7 @@ export function YouTubeInput() {
             </p>
           )}
         </form>
-      ) : (
+      ) : step === "options" ? (
         <div className="space-y-6">
           <div className="flex items-center gap-4 mb-6">
             <Button
@@ -168,6 +223,74 @@ export function YouTubeInput() {
               )}
             </Button>
           </form>
+        </div>
+      ) : step === "processing" ? (
+        <div className="space-y-6">
+          <div className="text-center space-y-4">
+            <div className="flex items-center justify-center gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-lg font-medium">Analyzing video...</span>
+            </div>
+            
+            {videoMetadata && (
+              <div className="bg-card border border-border rounded-lg p-4">
+                <img 
+                  src={videoMetadata.thumbnail} 
+                  alt="Video thumbnail"
+                  className="w-full aspect-video object-cover rounded-lg mb-3"
+                />
+                <h3 className="font-semibold text-lg">{videoMetadata.title}</h3>
+              </div>
+            )}
+
+            {streamingContent && (
+              <div className="bg-card border border-border rounded-lg p-6 text-left">
+                <div className="prose prose-sm max-w-none">
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {streamingContent}
+                    <span className="inline-block w-2 h-4 bg-primary ml-1 animate-pulse" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : step === "results" ? (
+        <div className="space-y-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setStep("url")}
+            className="flex items-center gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Analyze Another Video
+          </Button>
+
+          {videoMetadata && (
+            <div className="bg-card border border-border rounded-lg p-4">
+              <img 
+                src={videoMetadata.thumbnail} 
+                alt="Video thumbnail"
+                className="w-full aspect-video object-cover rounded-lg mb-3"
+              />
+              <h3 className="font-semibold text-lg">{videoMetadata.title}</h3>
+            </div>
+          )}
+
+          <div className="bg-gradient-to-br from-card via-card to-accent/10 border border-border rounded-xl p-8 shadow-lg">
+            <div className="prose prose-sm max-w-none">
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                {finalResult}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {error && (
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
+          <p className="text-destructive text-sm">{error}</p>
         </div>
       )}
 
