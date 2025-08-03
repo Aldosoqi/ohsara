@@ -230,8 +230,7 @@ async function scrapeTranscript(videoId: string): Promise<string | null> {
     const apifyUrl = `https://api.apify.com/v2/acts/pintostudio~youtube-transcript-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`;
     
     const requestBody = {
-      startUrls: [`https://www.youtube.com/watch?v=${videoId}`],
-      maxItems: 1
+      videoUrl: `https://www.youtube.com/watch?v=${videoId}`
     };
     
     console.log('Apify request body:', JSON.stringify(requestBody));
