@@ -95,11 +95,12 @@ serve(async (req) => {
     console.log('Starting AI analysis...');
     console.log('Transcript length:', transcript.length, 'characters');
     
-    const maxChunkSize = 15000; // Characters per chunk
+    // GPT-4.1 has much larger context window (1M+ tokens), so we can handle much larger transcripts
+    const maxDirectProcessingSize = 200000; // Characters - much larger due to GPT-4.1's huge context window
     let analysisResult = '';
     
-    if (transcript.length <= maxChunkSize) {
-      // Short transcript - process normally
+    if (transcript.length <= maxDirectProcessingSize) {
+      // Process directly with GPT-4.1 - no chunking needed for most videos
       const analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
       
       const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -109,7 +110,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4.1',
           messages: [
             {
               role: 'system',
@@ -122,7 +123,7 @@ serve(async (req) => {
           ],
           stream: true,
           temperature: 0.7,
-          max_tokens: 4000
+          max_tokens: 8000
         }),
       });
 
@@ -149,11 +150,11 @@ serve(async (req) => {
         console.error('Failed to save summary:', summaryError);
       }
 
-      // Return streaming response for short content
+      // Return streaming response
       return createStreamingResponse(openAIResponse, summary, videoMetadata, supabase);
     } else {
-      // Long transcript - use chunking
-      console.log('Long transcript detected, using chunking approach...');
+      // Very long transcript - use optimized chunking with GPT-4.1
+      console.log('Very long transcript detected, using optimized chunking approach...');
       return await processLongTranscript(transcript, analysisType, customRequest, videoMetadata, user, youtubeUrl, supabase);
     }
 
@@ -175,25 +176,26 @@ async function processLongTranscript(
   youtubeUrl: string, 
   supabase: any
 ) {
-  console.log('Processing long transcript with chunking...');
+  console.log('Processing very long transcript with optimized chunking...');
   
-  const maxChunkSize = 15000;
+  // GPT-4.1 can handle much larger chunks, so we use fewer, larger chunks
+  const maxChunkSize = 80000; // Much larger chunks due to GPT-4.1's huge context window
   const chunks = splitTranscriptIntoChunks(transcript, maxChunkSize);
   console.log(`Split transcript into ${chunks.length} chunks`);
   
   let combinedAnalysis = '';
   let chunkAnalyses: string[] = [];
   
-  // Process each chunk with rate limiting
+  // Process each chunk with minimal delay due to higher rate limits
   for (let i = 0; i < chunks.length; i++) {
     console.log(`Processing chunk ${i + 1}/${chunks.length}...`);
     
     const chunkPrompt = buildChunkAnalysisPrompt(analysisType, customRequest, chunks[i], i + 1, chunks.length);
     
-    // Add delay between requests to respect rate limits (except for first request)
+    // GPT-4.1 has much higher rate limits, so minimal delay needed
     if (i > 0) {
-      console.log('Waiting 20 seconds to respect rate limits...');
-      await new Promise(resolve => setTimeout(resolve, 20000));
+      console.log('Waiting 2 seconds between requests...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
     
     const chunkAnalysis = await processChunkWithRetry(chunkPrompt, i + 1);
@@ -223,7 +225,7 @@ async function processLongTranscript(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1',
       messages: [
         {
           role: 'system',
@@ -236,7 +238,7 @@ async function processLongTranscript(
       ],
       stream: true,
       temperature: 0.7,
-      max_tokens: 4000
+      max_tokens: 12000
     }),
   });
   
@@ -280,7 +282,7 @@ async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, m
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4.1',
           messages: [
             {
               role: 'system',
@@ -292,7 +294,7 @@ async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, m
             }
           ],
           temperature: 0.7,
-          max_tokens: 2000
+          max_tokens: 4000
         }),
       });
 
@@ -306,7 +308,7 @@ async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, m
         
         // Check if it's a rate limit error
         if (errorText.includes('rate_limit_exceeded') && attempt < maxRetries) {
-          const waitTime = Math.min(60000, 20000 * attempt); // Exponential backoff, max 1 minute
+          const waitTime = Math.min(30000, 5000 * attempt); // Shorter waits due to higher GPT-4.1 rate limits
           console.log(`Rate limit hit, waiting ${waitTime/1000} seconds before retry...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           continue;
