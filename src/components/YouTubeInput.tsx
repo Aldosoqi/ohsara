@@ -52,8 +52,44 @@ export function YouTubeInput() {
         throw new Error(response.error.message);
       }
 
+      // Check if response has an error
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      // For non-streaming responses (errors), handle directly
+      if (typeof response.data === 'object' && response.data.error) {
+        throw new Error(response.data.error);
+      }
+
+      // Handle streaming response by making a direct fetch call
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const streamResponse = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/process-youtube`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
+        },
+        body: JSON.stringify({
+          youtubeUrl: url,
+          analysisType: selectedOption,
+          customRequest: customRequest
+        })
+      });
+
+      if (!streamResponse.ok) {
+        const errorData = await streamResponse.json().catch(() => ({ error: 'Edge Function returned a non-2xx status code' }));
+        throw new Error(errorData.error || 'Edge Function returned a non-2xx status code');
+      }
+
       // Handle streaming response
-      const reader = response.data.getReader();
+      const reader = streamResponse.body?.getReader();
+      if (!reader) {
+        throw new Error('No readable stream available');
+      }
+
       const decoder = new TextDecoder();
       let result = '';
 
