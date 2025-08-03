@@ -96,12 +96,12 @@ serve(async (req) => {
     console.log('Starting AI analysis...');
     console.log('Transcript length:', transcript.length, 'characters');
     
-    // GPT-4.1 has much larger context window (1M+ tokens), so we can handle much larger transcripts
-    const maxDirectProcessingSize = 800000; // Characters - GPT-4.1 can handle ~1M tokens (roughly 800k chars)
+    // Use much lower threshold to avoid OpenAI token limits - switch to Gemini for most videos
+    const maxDirectProcessingSize = 50000; // Much smaller threshold - roughly 12-15k tokens
     let analysisResult = '';
     
     if (transcript.length <= maxDirectProcessingSize) {
-      // Process directly with GPT-4.1 - no chunking needed for most videos
+      // Process short transcripts with OpenAI - most videos will use Gemini
       const analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
       
       const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
