@@ -343,7 +343,9 @@ function buildAnalysisPrompt(analysisType: string, customRequest: string, transc
       return basePrompt + 'Provide a technical analysis and review of the content, including technical details, pros/cons, and expert insights.';
     
     case 'custom':
-      return basePrompt + `Based on this specific request: "${customRequest}", please analyze the content accordingly.`;
+      return basePrompt + `I need you to focus specifically on: "${customRequest}". 
+
+Please provide a detailed, focused analysis that directly addresses this request. Structure your response clearly and provide specific examples, quotes, or details from the transcript that relate to what I'm asking for. If the transcript doesn't contain information about my specific request, please clearly state that and suggest what related information is available instead.`;
     
     default:
       return basePrompt + 'Provide a comprehensive analysis of this video content.';
