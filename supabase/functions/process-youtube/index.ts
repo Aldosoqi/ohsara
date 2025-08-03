@@ -110,7 +110,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4-turbo',
+          model: 'gpt-4.1-2025-04-14',
           messages: [
             {
               role: 'system',
@@ -227,7 +227,7 @@ async function processLongTranscript(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4-turbo',
+      model: 'gpt-4.1-2025-04-14',
       messages: [
         {
           role: 'system',
@@ -284,7 +284,7 @@ async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, m
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4-turbo',
+          model: 'gpt-4.1-2025-04-14',
           messages: [
             {
               role: 'system',
