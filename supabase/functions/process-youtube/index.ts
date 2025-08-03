@@ -217,8 +217,19 @@ async function processLongTranscript(
       const chunkData = await chunkResponse.json();
       const chunkAnalysis = chunkData.choices?.[0]?.message?.content || '';
       chunkAnalyses.push(chunkAnalysis);
+      console.log(`Chunk ${i + 1} processed successfully`);
+    } else {
+      console.error(`Failed to process chunk ${i + 1}:`, await chunkResponse.text());
+      chunkAnalyses.push(`[Error processing chunk ${i + 1}]`);
     }
   }
+  
+  // Check if we have any successful chunk analyses
+  if (chunkAnalyses.length === 0) {
+    throw new Error('Failed to process any chunks of the transcript');
+  }
+  
+  console.log(`Successfully processed ${chunkAnalyses.length} chunks, combining results...`);
   
   // Combine all chunk analyses
   const finalPrompt = buildFinalCombinationPrompt(analysisType, customRequest, chunkAnalyses);
@@ -248,7 +259,9 @@ async function processLongTranscript(
   });
   
   if (!finalResponse.ok) {
-    throw new Error('Failed to analyze content');
+    const errorText = await finalResponse.text();
+    console.error('OpenAI API error for final analysis:', errorText);
+    throw new Error(`Failed to analyze content: ${errorText}`);
   }
   
   // Save summary to database
