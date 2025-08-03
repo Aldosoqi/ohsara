@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { YouTubeInput } from "@/components/YouTubeInput";
 import { SuggestionPills } from "@/components/SuggestionPills";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
+import { Coins } from "lucide-react";
 
 const Index = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -33,6 +35,21 @@ const Index = () => {
   return (
     <div className="min-h-screen flex items-center justify-center px-8">
       <div className="w-full max-w-4xl mx-auto space-y-12">
+        {/* Credits section */}
+        <div className="flex justify-center">
+          <Card className="bg-card border-border">
+            <CardContent className="flex items-center gap-3 py-3 px-4">
+              <div className="inline-flex items-center justify-center w-8 h-8 bg-primary/10 rounded-full">
+                <Coins className="h-4 w-4 text-primary" />
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Credits: </span>
+                <span className="font-semibold text-foreground">{profile?.credits || 0}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Main input section */}
         <div className="text-center space-y-8">
           <YouTubeInput />
