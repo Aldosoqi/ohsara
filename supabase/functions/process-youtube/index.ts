@@ -264,32 +264,27 @@ async function scrapeTranscript(videoId: string): Promise<string | null> {
     console.log('First item structure:', Object.keys(firstItem || {}));
     console.log('First item data:', JSON.stringify(firstItem, null, 2));
 
-    const transcript = firstItem?.transcript;
-    if (!transcript) {
-      console.log('No transcript property found in response');
+    const transcriptData = firstItem?.data;
+    if (!transcriptData || !Array.isArray(transcriptData)) {
+      console.log('No transcript data array found in response');
       return null;
     }
 
-    if (typeof transcript === 'string') {
-      console.log('Transcript is string, length:', transcript.length);
-      return transcript;
+    // Filter out items without text and extract text content
+    const textItems = transcriptData.filter(item => item?.text);
+    
+    if (textItems.length === 0) {
+      console.log('No text items found in transcript data');
+      return null;
     }
 
-    if (Array.isArray(transcript)) {
-      console.log('Transcript is array, length:', transcript.length);
-      if (transcript.length === 0) {
-        console.log('Transcript array is empty');
-        return null;
-      }
-      
-      // Join array elements if it's an array of objects with text property
-      const joinedTranscript = transcript.map(item => 
-        typeof item === 'string' ? item : item?.text || item
-      ).join(' ');
-      
-      console.log('Joined transcript length:', joinedTranscript.length);
-      return joinedTranscript;
-    }
+    // Join all text segments
+    const joinedTranscript = textItems.map(item => item.text).join(' ');
+    
+    console.log('Extracted transcript length:', joinedTranscript.length);
+    console.log('First 200 characters:', joinedTranscript.substring(0, 200));
+    
+    return joinedTranscript;
 
     console.log('Transcript is neither string nor array:', typeof transcript);
     return null;
