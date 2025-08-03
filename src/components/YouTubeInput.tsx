@@ -41,7 +41,7 @@ export function YouTubeInput() {
           .is('summary', null)
           .order('created_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (incompleteSummary) {
           // Resume the incomplete request
@@ -256,23 +256,34 @@ export function YouTubeInput() {
     } catch (error) {
       console.error('Error processing video:', error);
       
-      // Show simple error message and stay on processing step
-      setStep("processing");
-      setStreamingContent("Sorry, there are too many requests. Please try again later. Your credit has been refunded.");
-      setIsLoading(false);
-      
-      // Refund credit automatically in the background
-      try {
-        const { supabase } = await import("@/integrations/supabase/client");
-        await supabase.rpc('update_user_credits', {
-          user_id_param: (await supabase.auth.getSession()).data.session?.user?.id,
-          credit_amount: 1,
-          transaction_type_param: 'refund',
-          description_param: 'Too many requests - refunded'
-        });
-      } catch (refundError) {
-        console.error('Failed to refund credit:', refundError);
+      // Only refund credit if summary was created (meaning we actually charged the user)
+      if (currentSummaryId) {
+        try {
+          await supabase.rpc('update_user_credits', {
+            user_id_param: (await supabase.auth.getSession()).data.session?.user?.id,
+            credit_amount: 1,
+            transaction_type_param: 'refund',
+            description_param: 'Processing failed - refunded'
+          });
+          
+          // Delete the incomplete summary record
+          await supabase
+            .from('summaries')
+            .delete()
+            .eq('id', currentSummaryId);
+        } catch (refundError) {
+          console.error('Failed to refund credit:', refundError);
+        }
       }
+      
+      // Show appropriate error message based on the error
+      setStep("processing");
+      if (error.message === 'Failed to create summary record') {
+        setStreamingContent("Please make sure you're logged in and try again.");
+      } else {
+        setStreamingContent("Sorry, there are too many requests. Please try again later. Your credit has been refunded.");
+      }
+      setIsLoading(false);
     }
   };
 
