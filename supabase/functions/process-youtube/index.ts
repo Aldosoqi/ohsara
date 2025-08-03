@@ -156,7 +156,7 @@ serve(async (req) => {
       // Return streaming response
       return createStreamingResponse(openAIResponse, summary, videoMetadata, supabase);
     } else {
-      // Very long transcript - use optimized chunking with GPT-4.1
+      // Very long transcript - use Gemini Flash 2.5 for optimized chunking
       console.log('Very long transcript detected, using optimized chunking approach...');
       return await processLongTranscript(transcript, analysisType, customRequest, videoMetadata, user, youtubeUrl, supabase);
     }
@@ -179,10 +179,10 @@ async function processLongTranscript(
   youtubeUrl: string, 
   supabase: any
 ) {
-  console.log('Processing very long transcript with optimized chunking...');
+  console.log('Processing very long transcript with Gemini Flash 2.5...');
   
-  // GPT-4-turbo can handle much larger chunks, so we use fewer, larger chunks
-  const maxChunkSize = 300000; // Much larger chunks due to GPT-4-turbo's huge context window
+  // Gemini Flash 2.5 can handle large chunks efficiently
+  const maxChunkSize = 300000; // Large chunks due to Gemini's capabilities
   const chunks = splitTranscriptIntoChunks(transcript, maxChunkSize);
   console.log(`Split transcript into ${chunks.length} chunks`);
   
@@ -195,7 +195,7 @@ async function processLongTranscript(
     
     const chunkPrompt = buildChunkAnalysisPrompt(analysisType, customRequest, chunks[i], i + 1, chunks.length);
     
-    // GPT-4-turbo has higher rate limits, so minimal delay needed
+    // Gemini has good rate limits, minimal delay needed
     if (i > 0) {
       console.log('Waiting 1 second between requests...');
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -300,7 +300,7 @@ async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, m
         
         // Check if it's a rate limit error
         if (errorText.includes('rate_limit_exceeded') && attempt < maxRetries) {
-          const waitTime = Math.min(20000, 3000 * attempt); // Shorter waits due to higher GPT-4-turbo rate limits
+          const waitTime = Math.min(20000, 3000 * attempt); // Shorter waits due to Gemini's rate limits
           console.log(`Rate limit hit, waiting ${waitTime/1000} seconds before retry...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           continue;
