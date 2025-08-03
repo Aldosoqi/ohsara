@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
-import { Clock, Video, ExternalLink } from "lucide-react";
+import { Clock, Video, ExternalLink, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 interface Summary {
   id: string;
@@ -15,7 +17,9 @@ interface Summary {
 const History = () => {
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSummary, setSelectedSummary] = useState<Summary | null>(null);
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchSummaries = async () => {
@@ -53,6 +57,67 @@ const History = () => {
       minute: '2-digit'
     });
   };
+
+  const openSummary = (summary: Summary) => {
+    setSelectedSummary(summary);
+  };
+
+  const closeSummary = () => {
+    setSelectedSummary(null);
+  };
+
+  if (selectedSummary) {
+    return (
+      <div className="min-h-screen p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <Button 
+              variant="ghost" 
+              onClick={closeSummary}
+              className="mb-4"
+            >
+              ← Back to History
+            </Button>
+            <div className="flex gap-4 mb-6">
+              {selectedSummary.thumbnail_url && (
+                <img
+                  src={selectedSummary.thumbnail_url}
+                  alt="Video thumbnail"
+                  className="w-48 h-27 object-cover rounded-lg"
+                />
+              )}
+              <div className="flex-1">
+                <h1 className="text-2xl font-semibold text-foreground mb-2">
+                  {selectedSummary.video_title || 'YouTube Video'}
+                </h1>
+                <p className="text-muted-foreground mb-2">
+                  {formatDate(selectedSummary.created_at)}
+                </p>
+                <a
+                  href={selectedSummary.youtube_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-primary hover:underline"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Watch on YouTube
+                </a>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-card border border-border rounded-xl p-8">
+            <h2 className="text-xl font-semibold text-foreground mb-4">Summary</h2>
+            <div className="prose prose-sm max-w-none">
+              <p className="text-foreground whitespace-pre-wrap leading-relaxed">
+                {selectedSummary.summary}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-8">
@@ -118,11 +183,20 @@ const History = () => {
                     <p className="text-sm text-muted-foreground mb-3">
                       {formatDate(summary.created_at)}
                     </p>
-                    <div className="bg-secondary/50 rounded-lg p-4">
+                    <div className="bg-secondary/50 rounded-lg p-4 mb-4">
                       <p className="text-sm text-foreground line-clamp-4">
                         {summary.summary}
                       </p>
                     </div>
+                    <Button
+                      onClick={() => openSummary(summary)}
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                    >
+                      <Eye className="h-4 w-4" />
+                      View Full Summary
+                    </Button>
                   </div>
                 </div>
               </div>
