@@ -293,7 +293,14 @@ export function YouTubeInput() {
           <div className="bg-gradient-to-br from-card via-card to-accent/10 border border-border rounded-xl p-8 shadow-lg">
             <div className="prose prose-sm max-w-none">
               <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {finalResult}
+                {finalResult
+                  .replace(/#{1,6}\s+/g, '') // Remove markdown headers
+                  .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
+                  .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting
+                  .replace(/^[-*+]\s+/gm, '• ') // Convert list markers to bullets
+                  .replace(/^\d+\.\s+/gm, '• ') // Convert numbered lists to bullets
+                  .replace(/`(.*?)`/g, '$1') // Remove code formatting
+                }
               </div>
             </div>
           </div>
