@@ -38,7 +38,7 @@ export function YouTubeInput() {
           .from('summaries')
           .select('*')
           .eq('user_id', session.user.id)
-          .is('summary', null)
+          .eq('summary', '') // Check for empty string instead of null
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -174,7 +174,7 @@ export function YouTubeInput() {
         .insert({
           user_id: session?.user?.id,
           youtube_url: url,
-          summary: null, // Will be updated when processing completes
+          summary: '', // Use empty string instead of null since column is NOT NULL
         })
         .select()
         .single();
