@@ -1,9 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { YouTubeInput } from "@/components/YouTubeInput";
-import { LongContentInput } from "@/components/LongContentInput";
 import { SuggestionPills } from "@/components/SuggestionPills";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 const Index = () => {
@@ -29,29 +27,13 @@ const Index = () => {
     return null; // Will redirect to auth
   }
   return <div className="min-h-screen flex items-center justify-center px-8">
-      <div className="w-full max-w-6xl mx-auto space-y-12">
-        {/* Main input section with tabs */}
+      <div className="w-full max-w-4xl mx-auto space-y-12">
+        {/* Main input section */}
         <div className="text-center space-y-8">
-          <div className="text-center mb-8">
-            <h1 className="ohsara-logo text-6xl font-light tracking-tight text-foreground mb-6">
-              ohsara
-            </h1>
-          </div>
-
-          <Tabs defaultValue="youtube" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto">
-              <TabsTrigger value="youtube">YouTube Videos</TabsTrigger>
-              <TabsTrigger value="content">Long Content</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="youtube" className="mt-8">
-              <YouTubeInput />
-            </TabsContent>
-            
-            <TabsContent value="content" className="mt-8">
-              <LongContentInput />
-            </TabsContent>
-          </Tabs>
+          <YouTubeInput />
+          
+          {/* Suggestion pills */}
+          
         </div>
 
         {/* Feature highlights */}
