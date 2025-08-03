@@ -10,6 +10,7 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY')!;
+const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!;
 const apifyApiKey = Deno.env.get('APIFY_API_KEY')!;
 
 serve(async (req) => {
@@ -220,27 +221,21 @@ async function processLongTranscript(
   // Combine all chunk analyses
   const finalPrompt = buildFinalCombinationPrompt(analysisType, customRequest, chunkAnalyses);
   
-  const finalResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+  const finalResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + geminiApiKey, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4.1-2025-04-14',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert video content analyzer. Combine and synthesize the chunk analyses into a comprehensive final analysis.'
-        },
-        {
-          role: 'user',
-          content: finalPrompt
-        }
-      ],
-      stream: true,
-      temperature: 0.7,
-      max_tokens: 20000
+      contents: [{
+        parts: [{
+          text: `You are an expert video content analyzer. Combine and synthesize the chunk analyses into a comprehensive final analysis.\n\n${finalPrompt}`
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 20000
+      }
     }),
   });
   
@@ -269,7 +264,7 @@ async function processLongTranscript(
     console.error('Failed to save summary:', summaryError);
   }
   
-  return createStreamingResponse(finalResponse, summary, videoMetadata, supabase);
+  return createStreamingResponse(finalResponse, summary, videoMetadata, supabase, true);
 }
 
 async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, maxRetries: number = 3): Promise<string | null> {
@@ -277,32 +272,27 @@ async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, m
     try {
       console.log(`Attempting to process chunk ${chunkNumber}, attempt ${attempt}/${maxRetries}`);
       
-      const chunkResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      const chunkResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + geminiApiKey, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-2025-04-14',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an expert video content analyzer. Analyze this chunk of content and provide detailed insights.'
-            },
-            {
-              role: 'user',
-              content: chunkPrompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 4000
+          contents: [{
+            parts: [{
+              text: `You are an expert video content analyzer. Analyze this chunk of content and provide detailed insights.\n\n${chunkPrompt}`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 4000
+          }
         }),
       });
 
       if (chunkResponse.ok) {
         const chunkData = await chunkResponse.json();
-        const chunkAnalysis = chunkData.choices?.[0]?.message?.content || '';
+        const chunkAnalysis = chunkData.candidates?.[0]?.content?.parts?.[0]?.text || '';
         return chunkAnalysis;
       } else {
         const errorText = await chunkResponse.text();
@@ -335,10 +325,10 @@ async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, m
   return null;
 }
 
-function createStreamingResponse(openAIResponse: Response, summary: any, videoMetadata: any, supabase: any) {
+function createStreamingResponse(apiResponse: Response, summary: any, videoMetadata: any, supabase: any, isGemini: boolean = false) {
   const stream = new ReadableStream({
     async start(controller) {
-      const reader = openAIResponse.body?.getReader();
+      const reader = apiResponse.body?.getReader();
       if (!reader) {
         controller.close();
         return;
@@ -370,33 +360,54 @@ function createStreamingResponse(openAIResponse: Response, summary: any, videoMe
       };
 
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            await closeStream();
-            break;
+        if (isGemini) {
+          // For Gemini, we get a single response, not streaming
+          const geminiData = await apiResponse.json();
+          const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          fullContent = content;
+          
+          // Send the content in chunks to simulate streaming
+          const chunkSize = 50;
+          for (let i = 0; i < content.length; i += chunkSize) {
+            const chunk = content.slice(i, i + chunkSize);
+            if (!streamClosed) {
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content: chunk, videoMetadata, summaryId: summary?.id })}\n\n`));
+            }
+            // Small delay to simulate streaming
+            await new Promise(resolve => setTimeout(resolve, 10));
           }
+          
+          await closeStream();
+        } else {
+          // Original OpenAI streaming logic
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              await closeStream();
+              break;
+            }
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') {
-                await closeStream();
-                return;
-              }
-
-              try {
-                const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content;
-                if (content && !streamClosed) {
-                  fullContent += content;
-                  controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content, videoMetadata, summaryId: summary?.id })}\n\n`));
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') {
+                  await closeStream();
+                  return;
                 }
-              } catch (e) {
-                // Skip invalid JSON
+
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content && !streamClosed) {
+                    fullContent += content;
+                    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content, videoMetadata, summaryId: summary?.id })}\n\n`));
+                  }
+                } catch (e) {
+                  // Skip invalid JSON
+                }
               }
             }
           }
