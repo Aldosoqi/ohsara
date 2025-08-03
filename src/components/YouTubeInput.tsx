@@ -39,30 +39,6 @@ export function YouTubeInput() {
     
     try {
       const { supabase } = await import("@/integrations/supabase/client");
-      
-      const response = await supabase.functions.invoke('process-youtube', {
-        body: {
-          youtubeUrl: url,
-          analysisType: selectedOption,
-          customRequest: customRequest
-        }
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      // Check if response has an error
-      if (response.data?.error) {
-        throw new Error(response.data.error);
-      }
-
-      // For non-streaming responses (errors), handle directly
-      if (typeof response.data === 'object' && response.data.error) {
-        throw new Error(response.data.error);
-      }
-
-      // Handle streaming response by making a direct fetch call
       const { data: { session } } = await supabase.auth.getSession();
       
       const streamResponse = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/process-youtube`, {
