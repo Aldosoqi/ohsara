@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Play, Loader2, ArrowLeft } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const analysisOptions = [
   { id: "summary", label: "Summary", description: "Get a concise overview of the main points" },
@@ -23,6 +24,127 @@ export function YouTubeInput() {
   const [finalResult, setFinalResult] = useState("");
   const [videoMetadata, setVideoMetadata] = useState<any>(null);
   const [error, setError] = useState("");
+  const [currentSummaryId, setCurrentSummaryId] = useState<string | null>(null);
+
+  // Check for incomplete requests on mount
+  useEffect(() => {
+    const checkIncompleteRequest = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user?.id) return;
+
+        // Get the most recent incomplete summary
+        const { data: incompleteSummary } = await supabase
+          .from('summaries')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .is('summary', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (incompleteSummary) {
+          // Resume the incomplete request
+          setUrl(incompleteSummary.youtube_url);
+          setCurrentSummaryId(incompleteSummary.id);
+          setStep("processing");
+          setIsLoading(true);
+          
+          if (incompleteSummary.video_title) {
+            setVideoMetadata({
+              title: incompleteSummary.video_title,
+              thumbnail: incompleteSummary.thumbnail_url
+            });
+          }
+          
+          setStreamingContent("Resuming your previous request...");
+          
+          // Continue processing from where it left off
+          await continueProcessing(incompleteSummary.youtube_url, incompleteSummary.id);
+        }
+      } catch (error) {
+        console.error('Error checking incomplete requests:', error);
+      }
+    };
+
+    checkIncompleteRequest();
+  }, []);
+
+  const continueProcessing = async (youtubeUrl: string, summaryId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const streamResponse = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/process-youtube`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
+        },
+        body: JSON.stringify({
+          youtubeUrl: youtubeUrl,
+          analysisType: 'summary', // Default for resumed requests
+          summaryId: summaryId
+        })
+      });
+
+      if (!streamResponse.ok) {
+        throw new Error('Failed to resume processing');
+      }
+
+      const reader = streamResponse.body?.getReader();
+      if (!reader) {
+        throw new Error('No readable stream available');
+      }
+
+      const decoder = new TextDecoder();
+      let result = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                result += parsed.content;
+                setStreamingContent(result);
+              }
+              if (parsed.videoMetadata) {
+                setVideoMetadata(parsed.videoMetadata);
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+
+      // Update the summary in the database
+      await supabase
+        .from('summaries')
+        .update({ 
+          summary: result,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', summaryId);
+
+      setFinalResult(result);
+      setStep("results");
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error continuing processing:', error);
+      setStep("processing");
+      setStreamingContent("Sorry, there are too many requests. Please try again later. Your credit has been refunded.");
+      setIsLoading(false);
+    }
+  };
 
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,8 +166,24 @@ export function YouTubeInput() {
     setStep("processing");
     
     try {
-      const { supabase } = await import("@/integrations/supabase/client");
       const { data: { session } } = await supabase.auth.getSession();
+      
+      // Create a new summary record in the database first
+      const { data: newSummary, error: summaryError } = await supabase
+        .from('summaries')
+        .insert({
+          user_id: session?.user?.id,
+          youtube_url: url,
+          summary: null, // Will be updated when processing completes
+        })
+        .select()
+        .single();
+
+      if (summaryError || !newSummary) {
+        throw new Error('Failed to create summary record');
+      }
+
+      setCurrentSummaryId(newSummary.id);
       
       const streamResponse = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/process-youtube`, {
         method: 'POST',
@@ -100,6 +238,17 @@ export function YouTubeInput() {
           }
         }
       }
+
+      // Update the summary in the database
+      await supabase
+        .from('summaries')
+        .update({ 
+          summary: result,
+          video_title: videoMetadata?.title,
+          thumbnail_url: videoMetadata?.thumbnail,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentSummaryId);
 
       setFinalResult(result);
       setStep("results");
