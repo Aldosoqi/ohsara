@@ -477,17 +477,23 @@ export function YouTubeInput() {
           )}
 
           <div className="bg-gradient-to-br from-card via-card to-accent/10 border border-border rounded-xl p-8 shadow-lg">
-            <div className="prose prose-sm max-w-none">
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {finalResult
-                  .replace(/#{1,6}\s+/g, '') // Remove markdown headers
-                  .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
-                  .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting
-                  .replace(/^[-*+]\s+/gm, '• ') // Convert list markers to bullets
-                  .replace(/^\d+\.\s+/gm, '• ') // Convert numbered lists to bullets
-                  .replace(/`(.*?)`/g, '$1') // Remove code formatting
-                }
-              </div>
+            <div className="prose prose-lg max-w-none text-foreground">
+              <div 
+                className="formatted-content space-y-4"
+                dangerouslySetInnerHTML={{
+                  __html: finalResult
+                    .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-foreground mt-6 mb-3">$1</h3>')
+                    .replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-foreground mt-8 mb-4">$1</h2>')
+                    .replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-foreground mt-10 mb-5">$1</h1>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-foreground">$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
+                    .replace(/^[-•] (.*$)/gm, '<li class="ml-4 mb-1">$1</li>')
+                    .replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4 mb-1 list-decimal">$2</li>')
+                    .replace(/\n\n/g, '</p><p class="mb-4">')
+                    .replace(/^(?!<[h|l|s|e])/gm, '<p class="mb-4">')
+                    .replace(/<\/p><p class="mb-4">(?=<[h|l])/g, '</p>')
+                }}
+              />
             </div>
           </div>
         </div>
