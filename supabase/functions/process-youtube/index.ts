@@ -93,7 +93,32 @@ serve(async (req) => {
 
     // Step 5: Analyze transcript with OpenAI (streaming)
     console.log('Starting AI analysis...');
-    const analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
+    
+    // Check if transcript is too long and needs chunking
+    const maxChunkSize = 15000; // Conservative limit for context window
+    let analysisPrompt;
+    
+    if (transcript.length > maxChunkSize) {
+      console.log(`Transcript too long (${transcript.length} chars), chunking...`);
+      // For very long content, extract key sections and summarize
+      const chunks = [];
+      for (let i = 0; i < transcript.length; i += maxChunkSize) {
+        chunks.push(transcript.substring(i, i + maxChunkSize));
+      }
+      
+      // Take first chunk, middle chunk, and last chunk for analysis
+      const selectedChunks = [
+        chunks[0],
+        chunks[Math.floor(chunks.length / 2)],
+        chunks[chunks.length - 1]
+      ].filter(Boolean);
+      
+      const reducedTranscript = selectedChunks.join('\n\n[...]\n\n');
+      analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, reducedTranscript);
+      analysisPrompt += `\n\nNote: This is a long ${Math.floor(transcript.length / 1000)}k character transcript. Analysis is based on beginning, middle, and end sections.`;
+    } else {
+      analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
+    }
     
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
