@@ -14,6 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      credit_pack_purchases: {
+        Row: {
+          created_at: string
+          credits_purchased: number
+          id: string
+          pack_id: string
+          purchase_completed_at: string | null
+          starts_at: string
+          status: string
+          stripe_payment_intent_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits_purchased?: number
+          id?: string
+          pack_id: string
+          purchase_completed_at?: string | null
+          starts_at?: string
+          status: string
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credits_purchased?: number
+          id?: string
+          pack_id?: string
+          purchase_completed_at?: string | null
+          starts_at?: string
+          status?: string
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_pack_purchases_pack_id_fkey"
+            columns: ["pack_id"]
+            isOneToOne: false
+            referencedRelation: "credit_packs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_packs: {
+        Row: {
+          created_at: string
+          credits_included: number
+          description: string | null
+          display_order: number | null
+          features: string[] | null
+          id: string
+          is_active: boolean
+          name: string
+          popular: boolean | null
+          price_cents: number
+          savings_percentage: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credits_included: number
+          description?: string | null
+          display_order?: number | null
+          features?: string[] | null
+          id?: string
+          is_active?: boolean
+          name: string
+          popular?: boolean | null
+          price_cents: number
+          savings_percentage?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credits_included?: number
+          description?: string | null
+          display_order?: number | null
+          features?: string[] | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          popular?: boolean | null
+          price_cents?: number
+          savings_percentage?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       credit_transactions: {
         Row: {
           amount: number
@@ -77,45 +169,6 @@ export type Database = {
         }
         Relationships: []
       }
-      subscription_plans: {
-        Row: {
-          created_at: string
-          credits_included: number
-          currency: string
-          description: string | null
-          display_order: number | null
-          id: string
-          is_active: boolean
-          name: string
-          price_cents: number
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          credits_included: number
-          currency?: string
-          description?: string | null
-          display_order?: number | null
-          id?: string
-          is_active?: boolean
-          name: string
-          price_cents: number
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          credits_included?: number
-          currency?: string
-          description?: string | null
-          display_order?: number | null
-          id?: string
-          is_active?: boolean
-          name?: string
-          price_cents?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
       summaries: {
         Row: {
           created_at: string
@@ -158,55 +211,19 @@ export type Database = {
         }
         Relationships: []
       }
-      user_subscriptions: {
-        Row: {
-          created_at: string
-          ends_at: string | null
-          id: string
-          plan_id: string
-          starts_at: string
-          status: string
-          stripe_subscription_id: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          ends_at?: string | null
-          id?: string
-          plan_id: string
-          starts_at?: string
-          status: string
-          stripe_subscription_id?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          ends_at?: string | null
-          id?: string
-          plan_id?: string
-          starts_at?: string
-          status?: string
-          stripe_subscription_id?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_subscriptions_plan_id_fkey"
-            columns: ["plan_id"]
-            isOneToOne: false
-            referencedRelation: "subscription_plans"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      purchase_credit_pack: {
+        Args: {
+          user_id_param: string
+          pack_id_param: string
+          stripe_payment_intent_id_param: string
+        }
+        Returns: string
+      }
       update_user_credits: {
         Args: {
           user_id_param: string
