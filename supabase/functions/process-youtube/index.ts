@@ -91,39 +91,9 @@ serve(async (req) => {
     // Step 4: Get video metadata
     const videoMetadata = await getVideoMetadata(videoId);
 
-    // Step 5: Analyze transcript with RAG system
-    console.log('Starting RAG-powered analysis...');
-    
-    let analysisPrompt;
-    const maxChunkSize = 4000; // Optimal chunk size for embeddings
-    
-    if (transcript.length > maxChunkSize) {
-      console.log('Creating RAG document store...');
-      
-      // Create enriched chunks with metadata
-      const ragStore = await createRAGStore(transcript, maxChunkSize);
-      console.log(`Created RAG store with ${ragStore.length} documents`);
-      
-      // Build query from analysis type and custom request
-      const query = buildQueryFromRequest(analysisType, customRequest);
-      console.log('RAG Query:', query);
-      
-      // Retrieve most relevant chunks
-      const relevantChunks = await retrieveRelevantChunks(ragStore, query, 5);
-      console.log(`RAG Retrieved ${relevantChunks.length} documents for query: "${query}"`);
-      relevantChunks.forEach((chunk, i) => {
-        console.log(`  ${i + 1}. Doc chunk_${chunk.metadata.chunkIndex} (keyword+semantic, score: ${chunk.score.toFixed(2)}) - ${chunk.metadata.position}`);
-      });
-      
-      const contextualContent = relevantChunks.map(chunk => 
-        `[Chunk ${chunk.metadata.chunkIndex} - ${chunk.metadata.position} (${chunk.metadata.timestamp})]\n${chunk.content}`
-      ).join('\n\n---\n\n');
-      
-      analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, contextualContent);
-      analysisPrompt += `\n\nNote: Analysis based on ${relevantChunks.length} most relevant sections from a ${Math.floor(transcript.length / 1000)}k character transcript using RAG retrieval.`;
-    } else {
-      analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
-    }
+    // Step 5: Analyze transcript with OpenAI (streaming)
+    console.log('Starting AI analysis...');
+    const analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
     
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -132,11 +102,11 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o', // Using the most advanced model for better analysis
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: 'You are an expert video content analyzer with deep expertise in multiple domains. Provide detailed, well-structured, and insightful analysis based on the user\'s requirements. Use proper formatting with headers, bullet points, and clear structure for readability.'
+            content: 'You are an expert video content analyzer. Provide detailed, well-structured analysis based on the user\'s requirements.'
           },
           {
             role: 'user',
@@ -144,7 +114,7 @@ serve(async (req) => {
           }
         ],
         stream: true,
-        temperature: 0.3, // Lower temperature for more focused, accurate analysis
+        temperature: 0.7,
         max_tokens: 4000
       }),
     });
@@ -315,6 +285,9 @@ async function scrapeTranscript(videoId: string): Promise<string | null> {
     console.log('First 200 characters:', joinedTranscript.substring(0, 200));
     
     return joinedTranscript;
+
+    console.log('Transcript is neither string nor array:', typeof transcript);
+    return null;
   } catch (error) {
     console.error('Error scraping transcript:', error);
     return null;
@@ -367,323 +340,4 @@ function buildAnalysisPrompt(analysisType: string, customRequest: string, transc
     default:
       return basePrompt + 'Provide a comprehensive analysis of this video content.';
   }
-}
-
-// RAG System Implementation
-interface RAGDocument {
-  content: string;
-  embedding: number[];
-  metadata: {
-    chunkIndex: number;
-    position: 'beginning' | 'middle' | 'end';
-    timestamp: string;
-    topics: string[];
-    entities: string[];
-    wordCount: number;
-  };
-  score?: number;
-}
-
-async function createRAGStore(transcript: string, chunkSize: number): Promise<RAGDocument[]> {
-  const totalLength = transcript.length;
-  const overlap = Math.floor(chunkSize * 0.1); // 10% overlap
-  
-  // First pass: create chunks and extract metadata
-  const chunksData: Array<{
-    content: string;
-    chunkIndex: number;
-    position: 'beginning' | 'middle' | 'end';
-    timestamp: string;
-    topics: string[];
-    entities: string[];
-    wordCount: number;
-  }> = [];
-  
-  const texts: string[] = [];
-  
-  for (let i = 0; i < transcript.length; i += chunkSize - overlap) {
-    const chunk = transcript.substring(i, i + chunkSize);
-    if (chunk.trim().length < 100) continue; // Skip very small chunks
-    
-    const chunkIndex = Math.floor(i / (chunkSize - overlap));
-    const position = i < totalLength * 0.33 ? 'beginning' : 
-                    i < totalLength * 0.67 ? 'middle' : 'end';
-    
-    // Extract metadata
-    const topics = extractTopics(chunk);
-    const entities = extractEntities(chunk);
-    const timestamp = estimateTimestamp(i, totalLength);
-    
-    chunksData.push({
-      content: chunk,
-      chunkIndex,
-      position,
-      timestamp,
-      topics,
-      entities,
-      wordCount: chunk.split(' ').length
-    });
-    
-    texts.push(chunk);
-  }
-  
-  console.log(`Processing ${texts.length} chunks for embeddings...`);
-  
-  // Second pass: create embeddings in batches for efficiency
-  const embeddings = await createEmbeddingsBatch(texts);
-  
-  // Combine chunks with embeddings
-  const documents: RAGDocument[] = chunksData.map((chunkData, index) => ({
-    content: chunkData.content,
-    embedding: embeddings[index] || Array(1024).fill(0),
-    metadata: {
-      chunkIndex: chunkData.chunkIndex,
-      position: chunkData.position,
-      timestamp: chunkData.timestamp,
-      topics: chunkData.topics,
-      entities: chunkData.entities,
-      wordCount: chunkData.wordCount
-    }
-  }));
-  
-  return documents;
-}
-
-async function createEmbedding(text: string, retries = 3): Promise<number[]> {
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const response = await fetch('https://api.openai.com/v1/embeddings', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'text-embedding-3-large', // Most advanced embedding model
-          input: text.substring(0, 8000), // Limit input size
-          encoding_format: 'float',
-          dimensions: 1024 // Optimize for performance while maintaining quality
-        }),
-      });
-      
-      if (response.status === 429) {
-        // Rate limit hit - exponential backoff
-        const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s delays
-        console.log(`Rate limit hit, retrying in ${delay}ms (attempt ${attempt + 1}/${retries})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        continue;
-      }
-      
-      if (!response.ok) {
-        console.error('Embedding API error:', response.status, await response.text());
-        if (attempt === retries - 1) {
-          return Array(1024).fill(0); // Return zero vector as fallback
-        }
-        continue;
-      }
-      
-      const data = await response.json();
-      return data.data[0].embedding;
-    } catch (error) {
-      console.error(`Error creating embedding (attempt ${attempt + 1}):`, error);
-      if (attempt === retries - 1) {
-        return Array(1024).fill(0); // Return zero vector as fallback
-      }
-      // Wait before retry
-      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-    }
-  }
-  return Array(1024).fill(0);
-}
-
-// Batch embedding creation to avoid rate limits
-async function createEmbeddingsBatch(texts: string[]): Promise<number[][]> {
-  const batchSize = 100; // OpenAI allows up to 2048 inputs per request
-  const embeddings: number[][] = [];
-  
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const batch = texts.slice(i, i + batchSize);
-    console.log(`Processing embedding batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(texts.length/batchSize)}`);
-    
-    try {
-      const response = await fetch('https://api.openai.com/v1/embeddings', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'text-embedding-3-large',
-          input: batch.map(text => text.substring(0, 8000)),
-          encoding_format: 'float',
-          dimensions: 1024
-        }),
-      });
-      
-      if (response.status === 429) {
-        // Rate limit - wait and retry with exponential backoff
-        const delay = Math.min(30000, Math.pow(2, Math.floor(i/batchSize)) * 2000);
-        console.log(`Rate limit hit, waiting ${delay}ms before retry`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        i -= batchSize; // Retry this batch
-        continue;
-      }
-      
-      if (!response.ok) {
-        console.error('Batch embedding error:', response.status, await response.text());
-        // Fill with zero vectors for failed batch
-        for (let j = 0; j < batch.length; j++) {
-          embeddings.push(Array(1024).fill(0));
-        }
-        continue;
-      }
-      
-      const data = await response.json();
-      embeddings.push(...data.data.map((item: any) => item.embedding));
-      
-      // Small delay between batches to avoid rate limits
-      if (i + batchSize < texts.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-    } catch (error) {
-      console.error('Batch embedding error:', error);
-      // Fill with zero vectors for failed batch
-      for (let j = 0; j < batch.length; j++) {
-        embeddings.push(Array(1024).fill(0));
-      }
-    }
-  }
-  
-  return embeddings;
-}
-
-function extractTopics(text: string): string[] {
-  const topicKeywords = [
-    'technology', 'business', 'science', 'health', 'education', 'entertainment',
-    'sports', 'politics', 'economics', 'environment', 'culture', 'travel',
-    'food', 'fashion', 'art', 'music', 'finance', 'marketing', 'productivity',
-    'leadership', 'innovation', 'startup', 'investment', 'cryptocurrency',
-    'AI', 'machine learning', 'blockchain', 'sustainability', 'mental health'
-  ];
-  
-  const lowerText = text.toLowerCase();
-  return topicKeywords.filter(keyword => 
-    lowerText.includes(keyword) || lowerText.includes(keyword.replace(' ', ''))
-  );
-}
-
-function extractEntities(text: string): string[] {
-  // Simple entity extraction using regex patterns
-  const entities: string[] = [];
-  
-  // Names (capitalized words)
-  const nameMatches = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g);
-  if (nameMatches) entities.push(...nameMatches.slice(0, 5));
-  
-  // Companies/brands (common patterns)
-  const companyMatches = text.match(/\b(?:Apple|Google|Microsoft|Amazon|Facebook|Tesla|Netflix|Spotify|Instagram|Twitter|YouTube|TikTok|OpenAI|Meta)\b/gi);
-  if (companyMatches) entities.push(...companyMatches);
-  
-  // Numbers and dates
-  const numberMatches = text.match(/\b\d{4}\b|\b\d+%\b|\$\d+(?:\.\d{2})?\b/g);
-  if (numberMatches) entities.push(...numberMatches.slice(0, 3));
-  
-  return [...new Set(entities)]; // Remove duplicates
-}
-
-function estimateTimestamp(position: number, totalLength: number): string {
-  // Rough estimate assuming average speaking rate
-  const progressRatio = position / totalLength;
-  const estimatedMinutes = Math.floor(progressRatio * 60); // Assume 60min total
-  const minutes = Math.floor(estimatedMinutes);
-  const seconds = Math.floor((estimatedMinutes % 1) * 60);
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
-
-function buildQueryFromRequest(analysisType: string, customRequest: string): string {
-  const baseQueries = {
-    'summary': 'main points key information overview',
-    'key-takeaways': 'important insights lessons learned takeaways',
-    'step-by-step': 'process steps methodology instructions how to',
-    'general-explanation': 'explanation concepts definition meaning',
-    'tech-review': 'technical analysis review pros cons evaluation',
-    'custom': customRequest || 'general analysis'
-  };
-  
-  return baseQueries[analysisType as keyof typeof baseQueries] || customRequest || 'general analysis';
-}
-
-async function retrieveRelevantChunks(
-  ragStore: RAGDocument[], 
-  query: string, 
-  topK: number = 5
-): Promise<RAGDocument[]> {
-  // Create query embedding
-  const queryEmbedding = await createEmbedding(query);
-  
-  // Calculate hybrid scores (keyword + semantic similarity)
-  const scoredDocs = ragStore.map(doc => {
-    // Semantic similarity (cosine similarity)
-    const semanticScore = cosineSimilarity(queryEmbedding, doc.embedding);
-    
-    // Keyword matching score
-    const keywordScore = calculateKeywordScore(query, doc.content);
-    
-    // Topic relevance score
-    const topicScore = calculateTopicScore(query, doc.metadata.topics);
-    
-    // Combined score with weights
-    const finalScore = (semanticScore * 0.5) + (keywordScore * 0.3) + (topicScore * 0.2);
-    
-    return { ...doc, score: finalScore };
-  });
-  
-  // Sort by score and return top K
-  return scoredDocs
-    .sort((a, b) => (b.score || 0) - (a.score || 0))
-    .slice(0, topK);
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  
-  if (normA === 0 || normB === 0) return 0;
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
-function calculateKeywordScore(query: string, content: string): number {
-  const queryWords = query.toLowerCase().split(/\s+/);
-  const contentLower = content.toLowerCase();
-  
-  let matches = 0;
-  for (const word of queryWords) {
-    if (word.length > 2 && contentLower.includes(word)) {
-      matches++;
-    }
-  }
-  
-  return matches / queryWords.length;
-}
-
-function calculateTopicScore(query: string, topics: string[]): number {
-  const queryLower = query.toLowerCase();
-  let matches = 0;
-  
-  for (const topic of topics) {
-    if (queryLower.includes(topic.toLowerCase())) {
-      matches++;
-    }
-  }
-  
-  return topics.length > 0 ? matches / topics.length : 0;
 }
