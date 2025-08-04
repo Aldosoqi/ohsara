@@ -46,11 +46,11 @@ export function AppSidebar() {
                       to={item.url}
                       end
                       className={({ isActive }) => {
-                        const baseClass = `nav-item ${isActive ? "nav-item-active" : ""}`;
                         if (item.title === "Upgrade") {
-                          return `${baseClass} relative overflow-hidden bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20 hover:from-amber-500/20 hover:to-yellow-500/20 hover:border-amber-400/40 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-amber-500/20`;
+                          const upgradeClass = isActive ? "nav-item-active" : "";
+                          return `nav-item ${upgradeClass} relative overflow-hidden bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20 hover:from-amber-500/20 hover:to-yellow-500/20 hover:border-amber-400/40 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-amber-500/20`;
                         }
-                        return baseClass;
+                        return `nav-item ${isActive ? "nav-item-active" : ""}`;
                       }}
                     >
                       <item.icon className={`h-5 w-5 flex-shrink-0 ${item.title === "Upgrade" ? "text-amber-500" : ""}`} />
