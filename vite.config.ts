@@ -21,8 +21,8 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     // Enhanced minification and obfuscation for production
-    minify: 'terser',
-    terserOptions: {
+    minify: mode === 'production' ? 'terser' : 'esbuild',
+    terserOptions: mode === 'production' ? {
       compress: {
         drop_console: true, // Remove console.log statements
         drop_debugger: true, // Remove debugger statements
@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => ({
       format: {
         comments: false, // Remove all comments
       },
-    },
+    } : undefined,
     rollupOptions: {
       output: {
         // Obfuscate chunk names
