@@ -45,13 +45,31 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end
-                      className={({ isActive }) =>
-                        `nav-item ${isActive ? "nav-item-active" : ""}`
-                      }
+                      className={({ isActive }) => {
+                        const baseClasses = `nav-item ${isActive ? "nav-item-active" : ""}`;
+                        return item.title === "Upgrade" 
+                          ? `${baseClasses} bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/30 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105`
+                          : baseClasses;
+                      }}
                     >
-                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      <item.icon className={
+                        item.title === "Upgrade" 
+                          ? "h-5 w-5 flex-shrink-0 text-amber-500 drop-shadow-sm" 
+                          : "h-5 w-5 flex-shrink-0"
+                      } />
                       {!isCollapsed && (
-                        <span className="font-medium">{item.title}</span>
+                        <span className={
+                          item.title === "Upgrade"
+                            ? "font-semibold text-amber-600 dark:text-amber-400"
+                            : "font-medium"
+                        }>
+                          {item.title}
+                          {item.title === "Upgrade" && (
+                            <span className="ml-2 text-xs bg-gradient-to-r from-amber-500 to-orange-500 text-white px-2 py-0.5 rounded-full animate-pulse">
+                              ✨ PRO
+                            </span>
+                          )}
+                        </span>
                       )}
                     </NavLink>
                   </SidebarMenuButton>
