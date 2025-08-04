@@ -14,9 +14,13 @@ import { useSettings } from "@/hooks/useSettings";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-
 const Account = () => {
-  const { user, profile, signOut, refreshProfile } = useAuth();
+  const {
+    user,
+    profile,
+    signOut,
+    refreshProfile
+  } = useAuth();
   const {
     appearance,
     setAppearance,
@@ -33,40 +37,38 @@ const Account = () => {
     emailNotifications,
     setEmailNotifications,
     pushNotifications,
-    setPushNotifications,
+    setPushNotifications
   } = useSettings();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const {
+    toast
+  } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState(profile?.full_name || "");
   const [username, setUsername] = useState(profile?.username || "");
   const [saving, setSaving] = useState(false);
   const [currentSection, setCurrentSection] = useState("account");
   const [deleting, setDeleting] = useState(false);
-
   const handleSave = async () => {
     if (!user) return;
-    
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: fullName,
-          username: username || null,
-        })
-        .eq('user_id', user.id);
-
+      const {
+        error
+      } = await supabase.from('profiles').update({
+        full_name: fullName,
+        username: username || null
+      }).eq('user_id', user.id);
       if (error) {
         toast({
           title: "Error",
           description: "Failed to update profile. Please try again.",
-          variant: "destructive",
+          variant: "destructive"
         });
       } else {
         toast({
           title: "Profile updated",
-          description: "Your profile has been updated successfully.",
+          description: "Your profile has been updated successfully."
         });
         await refreshProfile();
         setIsEditing(false);
@@ -75,45 +77,39 @@ const Account = () => {
       toast({
         title: "Error",
         description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
+        variant: "destructive"
       });
     } finally {
       setSaving(false);
     }
   };
-
   const handleSignOut = async () => {
     await signOut();
     navigate("/auth");
   };
-
   const handleDeleteAccount = async () => {
     if (!user) return;
-    
     setDeleting(true);
     try {
       // First delete user profile and related data
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('user_id', user.id);
-
+      const {
+        error: profileError
+      } = await supabase.from('profiles').delete().eq('user_id', user.id);
       if (profileError) {
         throw profileError;
       }
 
       // Then delete the auth user
-      const { error: authError } = await supabase.auth.admin.deleteUser(user.id);
-      
+      const {
+        error: authError
+      } = await supabase.auth.admin.deleteUser(user.id);
       if (authError) {
         throw authError;
       }
-
       toast({
         title: "Account deleted",
-        description: "Your account has been permanently deleted.",
+        description: "Your account has been permanently deleted."
       });
-      
       await signOut();
       navigate("/");
     } catch (error) {
@@ -121,30 +117,22 @@ const Account = () => {
       toast({
         title: "Error",
         description: "Failed to delete account. Please contact support.",
-        variant: "destructive",
+        variant: "destructive"
       });
     } finally {
       setDeleting(false);
     }
   };
-
   if (!user) {
     navigate("/auth");
     return null;
   }
-
-  return (
-    <div className="min-h-screen bg-background">
+  return <div className="min-h-screen bg-background">
       <div className="flex">
         {/* Left Sidebar */}
         <div className="w-64 bg-muted/30 border-r border-border min-h-screen p-4">
           <div className="mb-6">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate(-1)}
-              className="mb-4 text-muted-foreground hover:text-foreground"
-            >
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="mb-4 text-muted-foreground hover:text-foreground">
               <ChevronLeft className="h-4 w-4 mr-1" />
               Back
             </Button>
@@ -152,35 +140,19 @@ const Account = () => {
           </div>
 
           <nav className="space-y-1">
-            <Button
-              variant="ghost"
-              className={`w-full justify-start ${currentSection === "account" ? "text-foreground bg-accent" : "text-muted-foreground"}`}
-              onClick={() => setCurrentSection("account")}
-            >
+            <Button variant="ghost" className={`w-full justify-start ${currentSection === "account" ? "text-foreground bg-accent" : "text-muted-foreground"}`} onClick={() => setCurrentSection("account")}>
               <User className="h-4 w-4 mr-3" />
               Account
             </Button>
-            <Button
-              variant="ghost"
-              className={`w-full justify-start ${currentSection === "preferences" ? "text-foreground bg-accent" : "text-muted-foreground"}`}
-              onClick={() => setCurrentSection("preferences")}
-            >
+            <Button variant="ghost" className={`w-full justify-start ${currentSection === "preferences" ? "text-foreground bg-accent" : "text-muted-foreground"}`} onClick={() => setCurrentSection("preferences")}>
               <Settings className="h-4 w-4 mr-3" />
               Preferences
             </Button>
-            <Button
-              variant="ghost"
-              className={`w-full justify-start ${currentSection === "notifications" ? "text-foreground bg-accent" : "text-muted-foreground"}`}
-              onClick={() => setCurrentSection("notifications")}
-            >
+            <Button variant="ghost" className={`w-full justify-start ${currentSection === "notifications" ? "text-foreground bg-accent" : "text-muted-foreground"}`} onClick={() => setCurrentSection("notifications")}>
               <Bell className="h-4 w-4 mr-3" />
               Notifications
             </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-muted-foreground"
-              disabled
-            >
+            <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
               <Users className="h-4 w-4 mr-3" />
               Team
             </Button>
@@ -190,11 +162,7 @@ const Account = () => {
 
           <div className="space-y-1">
             <h3 className="text-sm font-medium text-muted-foreground mb-2">Support</h3>
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-muted-foreground"
-              disabled
-            >
+            <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
               <HelpCircle className="h-4 w-4 mr-3" />
               Help & Support
             </Button>
@@ -210,24 +178,19 @@ const Account = () => {
               {currentSection === "notifications" && "Notifications"}
             </h1>
 
-            {currentSection === "account" && (
-              <>
+            {currentSection === "account" && <>
                 {/* Profile Section */}
                 <Card className="mb-6">
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
                       Profile
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          if (isEditing) {
-                            setFullName(profile?.full_name || "");
-                            setUsername(profile?.username || "");
-                          }
-                          setIsEditing(!isEditing);
-                        }}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => {
+                    if (isEditing) {
+                      setFullName(profile?.full_name || "");
+                      setUsername(profile?.username || "");
+                    }
+                    setIsEditing(!isEditing);
+                  }}>
                         <Edit2 className="h-4 w-4" />
                       </Button>
                     </CardTitle>
@@ -250,34 +213,16 @@ const Account = () => {
                     <div className="grid grid-cols-1 gap-4">
                       <div>
                         <Label htmlFor="fullName">Full Name</Label>
-                        {isEditing ? (
-                          <Input
-                            id="fullName"
-                            value={fullName}
-                            onChange={(e) => setFullName(e.target.value)}
-                            placeholder="Enter your full name"
-                          />
-                        ) : (
-                          <p className="text-sm text-muted-foreground mt-1">
+                        {isEditing ? <Input id="fullName" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Enter your full name" /> : <p className="text-sm text-muted-foreground mt-1">
                             {profile?.full_name || "Not set"}
-                          </p>
-                        )}
+                          </p>}
                       </div>
 
                       <div>
                         <Label htmlFor="username">Username</Label>
-                        {isEditing ? (
-                          <Input
-                            id="username"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            placeholder="Choose a username"
-                          />
-                        ) : (
-                          <p className="text-sm text-muted-foreground mt-1">
+                        {isEditing ? <Input id="username" value={username} onChange={e => setUsername(e.target.value)} placeholder="Choose a username" /> : <p className="text-sm text-muted-foreground mt-1">
                             {profile?.username || "Not set"}
-                          </p>
-                        )}
+                          </p>}
                       </div>
 
                       <div>
@@ -288,23 +233,18 @@ const Account = () => {
                       </div>
                     </div>
 
-                    {isEditing && (
-                      <div className="flex space-x-2">
+                    {isEditing && <div className="flex space-x-2">
                         <Button onClick={handleSave} disabled={saving}>
                           {saving ? "Saving..." : "Save changes"}
                         </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setIsEditing(false);
-                            setFullName(profile?.full_name || "");
-                            setUsername(profile?.username || "");
-                          }}
-                        >
+                        <Button variant="outline" onClick={() => {
+                    setIsEditing(false);
+                    setFullName(profile?.full_name || "");
+                    setUsername(profile?.username || "");
+                  }}>
                           Cancel
                         </Button>
-                      </div>
-                    )}
+                      </div>}
                   </CardContent>
                 </Card>
 
@@ -355,12 +295,7 @@ const Account = () => {
                             Manage your session and account access
                           </p>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleSignOut}
-                          className="text-destructive hover:text-destructive"
-                        >
+                        <Button variant="outline" size="sm" onClick={handleSignOut} className="text-destructive hover:text-destructive">
                           <LogOut className="h-4 w-4 mr-2" />
                           Sign out
                         </Button>
@@ -392,11 +327,7 @@ const Account = () => {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={handleDeleteAccount}
-                                disabled={deleting}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
+                              <AlertDialogAction onClick={handleDeleteAccount} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                                 {deleting ? "Deleting..." : "Delete Account"}
                               </AlertDialogAction>
                             </AlertDialogFooter>
@@ -406,11 +337,9 @@ const Account = () => {
                     </div>
                   </CardContent>
                 </Card>
-              </>
-            )}
+              </>}
 
-            {currentSection === "preferences" && (
-              <Card className="mb-6">
+            {currentSection === "preferences" && <Card className="mb-6">
                 <CardHeader>
                   <CardTitle>Preferences</CardTitle>
                   <CardDescription>Customize how Ohsara looks and behaves on your device</CardDescription>
@@ -474,37 +403,17 @@ const Account = () => {
                     </Select>
                   </div>
 
-                  <Separator />
+                  
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-sm font-medium">Autosuggest</Label>
-                      <p className="text-sm text-muted-foreground">Enable dropdown and tab-complete suggestions while typing a query</p>
-                    </div>
-                    <Switch
-                      checked={autosuggest}
-                      onCheckedChange={setAutosuggest}
-                    />
-                  </div>
+                  
 
-                  <Separator />
+                  
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-sm font-medium">Homepage widgets</Label>
-                      <p className="text-sm text-muted-foreground">Enable personalized widgets on the homepage</p>
-                    </div>
-                    <Switch
-                      checked={homepageWidgets}
-                      onCheckedChange={setHomepageWidgets}
-                    />
-                  </div>
+                  
                 </CardContent>
-              </Card>
-            )}
+              </Card>}
 
-            {currentSection === "notifications" && (
-              <Card className="mb-6">
+            {currentSection === "notifications" && <Card className="mb-6">
                 <CardHeader>
                   <CardTitle>Notifications</CardTitle>
                   <CardDescription>Configure when and how you receive notifications</CardDescription>
@@ -515,10 +424,7 @@ const Account = () => {
                       <Label className="text-sm font-medium">Request completion notifications</Label>
                       <p className="text-sm text-muted-foreground">Get notified when your YouTube summary requests are completed</p>
                     </div>
-                    <Switch
-                      checked={requestNotifications}
-                      onCheckedChange={setRequestNotifications}
-                    />
+                    <Switch checked={requestNotifications} onCheckedChange={setRequestNotifications} />
                   </div>
 
                   <Separator />
@@ -528,10 +434,7 @@ const Account = () => {
                       <Label className="text-sm font-medium">Email notifications</Label>
                       <p className="text-sm text-muted-foreground">Receive notifications via email</p>
                     </div>
-                    <Switch
-                      checked={emailNotifications}
-                      onCheckedChange={setEmailNotifications}
-                    />
+                    <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} />
                   </div>
 
                   <Separator />
@@ -541,10 +444,7 @@ const Account = () => {
                       <Label className="text-sm font-medium">Push notifications</Label>
                       <p className="text-sm text-muted-foreground">Receive browser push notifications</p>
                     </div>
-                    <Switch
-                      checked={pushNotifications}
-                      onCheckedChange={setPushNotifications}
-                    />
+                    <Switch checked={pushNotifications} onCheckedChange={setPushNotifications} />
                   </div>
 
                   <Separator />
@@ -561,13 +461,10 @@ const Account = () => {
                     </div>
                   </div>
                 </CardContent>
-              </Card>
-            )}
+              </Card>}
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Account;
