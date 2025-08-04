@@ -369,18 +369,9 @@ const Account = () => {
                       <Label className="text-sm font-medium">Language</Label>
                       <p className="text-sm text-muted-foreground">The language used in the user interface</p>
                     </div>
-                    <Select value={language} onValueChange={setLanguage}>
-                      <SelectTrigger className="w-48">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="american-english">American English</SelectItem>
-                        <SelectItem value="british-english">British English</SelectItem>
-                        <SelectItem value="spanish">Spanish</SelectItem>
-                        <SelectItem value="french">French</SelectItem>
-                        <SelectItem value="german">German</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="w-48 px-3 py-2 bg-muted rounded-md">
+                      <span className="text-sm">American English</span>
+                    </div>
                   </div>
 
                   <Separator />
