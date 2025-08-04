@@ -45,7 +45,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   
   // Initialize settings from profile if available, otherwise localStorage or defaults
   const [appearance, setAppearanceState] = useState(() => 
-    (profile as any)?.appearance_preference || localStorage.getItem('ohsara-appearance') || 'system'
+    (profile as any)?.appearance_preference || localStorage.getItem('ohsara-appearance') || 'light'
   );
   const [language, setLanguageState] = useState(() => 
     (profile as any)?.language_preference || localStorage.getItem('ohsara-language') || 'american-english'
