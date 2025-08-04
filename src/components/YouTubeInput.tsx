@@ -367,15 +367,25 @@ Examples:
         </div>
       ) : step === "results" ? (
         <div className="space-y-6">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={goBackToRequest}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Analyze Another Video
-          </Button>
+          <div className="flex items-center justify-between">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={goBackToRequest}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Analyze Another Video
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open('/history', '_blank')}
+              className="flex items-center gap-2"
+            >
+              View in History
+            </Button>
+          </div>
 
           {videoMetadata && (
             <div className="bg-card border border-border rounded-lg p-4">
