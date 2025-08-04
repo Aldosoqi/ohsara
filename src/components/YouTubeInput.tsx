@@ -335,12 +335,12 @@ export function YouTubeInput() {
       }
       
       // Show appropriate error message based on the error
-      setStep("processing");
       if (error.message === 'Failed to create summary record') {
-        setStreamingContent("Please make sure you're logged in and try again.");
+        setFinalResult("Please make sure you're logged in and try again.");
       } else {
-        setStreamingContent("Sorry, there are too many requests. Please try again later. Your credit has been refunded.");
+        setFinalResult(`Error: ${error.message}`);
       }
+      setStep("results");
       setIsLoading(false);
     }
   };
