@@ -38,8 +38,46 @@ function extractVideoId(url: string): string | null {
   return match ? match[1] : null;
 }
 
+// Helper function to get response language
+function getResponseLanguage(responseLanguage: string): string {
+  const languageMap: { [key: string]: string } = {
+    'automatic': 'automatic',
+    'english': 'English',
+    'spanish': 'Spanish',
+    'french': 'French',
+    'german': 'German'
+  };
+  return languageMap[responseLanguage] || 'automatic';
+}
+
+// Helper function to get subtitle languages based on user preferences
+function getSubtitleLanguages(language: string, responseLanguage: string): string[] {
+  // Map user language preferences to subtitle language codes
+  const languageMap: { [key: string]: string } = {
+    'american-english': 'en',
+    'british-english': 'en',
+    'spanish': 'es',
+    'french': 'fr',
+    'german': 'de'
+  };
+
+  const languages = ['en']; // Always include English as fallback
+  
+  // Add user's interface language
+  if (languageMap[language] && !languages.includes(languageMap[language])) {
+    languages.unshift(languageMap[language]);
+  }
+  
+  // Add user's response language preference
+  if (responseLanguage !== 'automatic' && languageMap[responseLanguage] && !languages.includes(languageMap[responseLanguage])) {
+    languages.unshift(languageMap[responseLanguage]);
+  }
+  
+  return languages;
+}
+
 // Extract transcript using Apify
-async function extractTranscript(youtubeUrl: string) {
+async function extractTranscript(youtubeUrl: string, userPreferences: any) {
   if (!apifyApiKey) {
     throw new Error('APIFY_API_KEY is not configured');
   }
@@ -60,7 +98,7 @@ async function extractTranscript(youtubeUrl: string) {
         searchSortBy: 'relevance',
         maxResults: 1,
         subtitlesFormat: 'text',
-        subtitlesLangs: ['en'],
+        subtitlesLangs: getSubtitleLanguages(userPreferences.language, userPreferences.response_language),
         verboseLog: false
       }),
     });
@@ -119,12 +157,18 @@ async function extractTranscript(youtubeUrl: string) {
 }
 
 // Process transcript with GPT-4o
-async function processTranscriptWithGPT(transcript: string, userRequest: string) {
+async function processTranscriptWithGPT(transcript: string, userRequest: string, userPreferences: any) {
   if (!openaiApiKey) {
     throw new Error('OPENAI_API_KEY is not configured');
   }
 
   console.log('Processing transcript with GPT-4o');
+
+  // Get response language preference
+  const responseLanguage = getResponseLanguage(userPreferences.response_language);
+  const languageInstruction = responseLanguage !== 'automatic' 
+    ? `\n7. IMPORTANT: Respond in ${responseLanguage} language only.`
+    : '\n7. Detect the language of the user request and respond in the same language.';
 
   const prompt = `You are an expert content analyzer. A user has provided a YouTube video transcript and wants specific information extracted from it.
 
@@ -139,7 +183,7 @@ Instructions:
 3. Format your response in a clear, readable manner with proper headings and structure
 4. Use bullet points, numbered lists, and paragraphs as appropriate
 5. If the user's request cannot be fully answered from the transcript, explain what information is available
-6. Make the response comprehensive but focused on the user's specific needs
+6. Make the response comprehensive but focused on the user's specific needs${languageInstruction}
 
 Please provide a well-formatted response that directly addresses the user's request:`;
 
@@ -205,16 +249,23 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    // Check and deduct credits
+    // Get user profile and preferences
     const { data: profile } = await supabase
       .from('profiles')
-      .select('credits')
+      .select('credits, language_preference, response_language_preference, appearance_preference')
       .eq('user_id', user.id)
       .single();
 
     if (!profile || profile.credits < 1) {
       throw new Error('Insufficient credits. Please purchase more credits to continue.');
     }
+
+    // Prepare user preferences object
+    const userPreferences = {
+      language: profile.language_preference || 'american-english',
+      response_language: profile.response_language_preference || 'automatic',
+      appearance: profile.appearance_preference || 'system'
+    };
 
     // Deduct credit first
     const { error: creditError } = await supabase.rpc('update_user_credits', {
@@ -246,7 +297,7 @@ serve(async (req) => {
         (async () => {
           try {
             // Extract transcript
-            const transcriptData = await extractTranscript(youtubeUrl);
+            const transcriptData = await extractTranscript(youtubeUrl, userPreferences);
             
             // Update video metadata with actual title from transcript data
             const updatedMetadata = {
@@ -276,7 +327,7 @@ serve(async (req) => {
             }
 
             // Process with GPT-4o (streaming)
-            const gptResponse = await processTranscriptWithGPT(transcriptData.transcript, userRequest);
+            const gptResponse = await processTranscriptWithGPT(transcriptData.transcript, userRequest, userPreferences);
             const reader = gptResponse.body?.getReader();
             
             if (!reader) {
