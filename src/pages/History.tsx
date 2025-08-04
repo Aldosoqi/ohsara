@@ -171,7 +171,7 @@ const History = () => {
                 <div className="flex gap-6">
                   <div className="flex-shrink-0">
                     <img
-                      src={summary.thumbnail_url || '/placeholder.svg'}
+                      src={summary.thumbnail_url || 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=400&h=240'}
                       alt="Video thumbnail"
                       className="w-40 h-24 object-cover rounded-lg border border-border"
                     />
