@@ -21,6 +21,9 @@ serve(async (req) => {
   try {
     const { youtubeUrl, analysisType, customRequest } = await req.json();
     
+    console.log(`🎬 Starting YouTube processing: ${youtubeUrl}`);
+    console.log(`📊 Analysis type: ${analysisType}`);
+    
     // Get user from auth header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -36,13 +39,13 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    console.log(`Processing YouTube URL: ${youtubeUrl} for user: ${user.id}`);
-
-    // Step 1: Extract video ID from URL
-    const videoId = extractVideoId(youtubeUrl);
+    // Step 1: Validate YouTube URL
+    const videoId = validateAndExtractVideoId(youtubeUrl);
     if (!videoId) {
-      throw new Error('Invalid YouTube URL');
+      throw new Error('Invalid YouTube URL. Please provide a valid YouTube video URL.');
     }
+
+    console.log(`✅ Valid video ID extracted: ${videoId}`);
 
     // Step 2: Check and deduct credits
     const { data: profile } = await supabase
@@ -52,7 +55,7 @@ serve(async (req) => {
       .single();
 
     if (!profile || profile.credits < 1) {
-      throw new Error('Insufficient credits');
+      throw new Error('Insufficient credits. Please purchase more credits to continue.');
     }
 
     // Deduct credit first
@@ -67,12 +70,14 @@ serve(async (req) => {
       throw new Error('Failed to deduct credits');
     }
 
-    // Step 3: Scrape transcript using Apify
-    console.log('Starting transcript extraction for video ID:', videoId);
-    const transcript = await scrapeTranscript(videoId);
+    console.log(`💳 Credit deducted for user: ${user.id}`);
 
-    if (!transcript) {
-      console.log('No transcript found, refunding credit...');
+    // Step 3: Extract transcript
+    console.log('📝 Extracting transcript...');
+    const transcriptData = await extractTranscript(videoId);
+    
+    if (!transcriptData.transcript) {
+      console.log('❌ No transcript found, refunding credit...');
       // Refund credit if no transcript found
       await supabase.rpc('update_user_credits', {
         user_id_param: user.id,
@@ -89,80 +94,62 @@ serve(async (req) => {
       });
     }
 
+    console.log(`✅ Transcript extracted: ${transcriptData.transcript.length} characters`);
+
     // Step 4: Get video metadata
-    const videoMetadata = await getVideoMetadata(videoId);
+    const videoMetadata = transcriptData.metadata;
+    console.log(`📹 Video metadata: ${videoMetadata.title}`);
 
-    // Step 5: Process transcript (with chunking for long content)
-    console.log('Starting AI analysis...');
-    console.log('Transcript length:', transcript.length, 'characters');
-    
-    // GPT-4.1 has much larger context window (1M+ tokens), so we can handle much larger transcripts
-    const maxDirectProcessingSize = 800000; // Characters - GPT-4.1 can handle ~1M tokens (roughly 800k chars)
-    let analysisResult = '';
-    
-    if (transcript.length <= maxDirectProcessingSize) {
-      // Process directly with GPT-4.1 - no chunking needed for most videos
-      const analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
-      
-      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4.1-2025-04-14',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an expert video content analyzer. Provide detailed, well-structured analysis based on the user\'s requirements.'
-            },
-            {
-              role: 'user',
-              content: analysisPrompt
-            }
-          ],
-          stream: true,
-          temperature: 0.7,
-          max_tokens: 16000
-        }),
-      });
+    // Step 5: Create summary record in database
+    const { data: summary, error: summaryError } = await supabase
+      .from('summaries')
+      .insert({
+        user_id: user.id,
+        youtube_url: youtubeUrl,
+        video_title: videoMetadata.title,
+        video_description: videoMetadata.description,
+        thumbnail_url: videoMetadata.thumbnail,
+        duration: videoMetadata.duration,
+        summary: 'Processing...', // Will be updated with actual content
+      })
+      .select()
+      .single();
 
-      if (!openAIResponse.ok) {
-        const errorText = await openAIResponse.text();
-        console.error('OpenAI API error:', errorText);
-        throw new Error(`Failed to analyze content: ${errorText}`);
-      }
-
-      // Step 6: Save summary to database
-      const { data: summary, error: summaryError } = await supabase
-        .from('summaries')
-        .insert({
-          user_id: user.id,
-          youtube_url: youtubeUrl,
-          video_title: videoMetadata.title,
-          video_description: videoMetadata.description,
-          thumbnail_url: videoMetadata.thumbnail,
-          duration: videoMetadata.duration,
-          summary: 'Processing...', // Will be updated with actual content
-        })
-        .select()
-        .single();
-
-      if (summaryError) {
-        console.error('Failed to save summary:', summaryError);
-      }
-
-      // Return streaming response
-      return createStreamingResponse(openAIResponse, summary, videoMetadata, supabase);
-    } else {
-      // Very long transcript - use Gemini Flash 2.5 for optimized chunking
-      console.log('Very long transcript detected, using optimized chunking approach...');
-      return await processLongTranscript(transcript, analysisType, customRequest, videoMetadata, user, youtubeUrl, supabase);
+    if (summaryError) {
+      console.error('❌ Failed to save summary:', summaryError);
+      throw new Error('Failed to create summary record');
     }
 
+    console.log(`💾 Summary record created: ${summary.id}`);
+
+    // Step 6: Process with AI (OpenAI first, fallback to Gemini)
+    console.log('🤖 Starting AI analysis...');
+    const analysisResult = await processWithAI(
+      transcriptData.transcript, 
+      analysisType, 
+      customRequest, 
+      videoMetadata
+    );
+
+    // Step 7: Format the final output with proper markdown
+    const formattedResult = formatAnalysisOutput(analysisResult, analysisType, videoMetadata);
+
+    // Step 8: Update summary in database with final result
+    await supabase
+      .from('summaries')
+      .update({ 
+        summary: formattedResult,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', summary.id);
+
+    console.log('✅ Analysis complete, returning streaming response');
+
+    // Return streaming response
+    return createStreamingResponse(formattedResult, summary, videoMetadata);
+
   } catch (error) {
-    console.error('Error in process-youtube function:', error);
+    console.error('❌ Error in process-youtube function:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -170,58 +157,185 @@ serve(async (req) => {
   }
 });
 
-async function processLongTranscript(
-  transcript: string, 
-  analysisType: string, 
-  customRequest: string, 
-  videoMetadata: any, 
-  user: any, 
-  youtubeUrl: string, 
-  supabase: any
-) {
-  console.log('Processing very long transcript with Gemini Flash 2.5...');
-  
-  // Gemini Flash 2.5 can handle large chunks efficiently
-  const maxChunkSize = 300000; // Large chunks due to Gemini's capabilities
-  const chunks = splitTranscriptIntoChunks(transcript, maxChunkSize);
-  console.log(`Split transcript into ${chunks.length} chunks`);
-  
-  let combinedAnalysis = '';
-  let chunkAnalyses: string[] = [];
-  
-  // Process each chunk with minimal delay due to higher rate limits
-  for (let i = 0; i < chunks.length; i++) {
-    console.log(`Processing chunk ${i + 1}/${chunks.length}...`);
+// Step 1: Enhanced URL validation
+function validateAndExtractVideoId(url: string): string | null {
+  try {
+    // Clean the URL
+    url = url.trim();
     
-    const chunkPrompt = buildChunkAnalysisPrompt(analysisType, customRequest, chunks[i], i + 1, chunks.length);
-    
-    // Gemini has good rate limits, minimal delay needed
-    if (i > 0) {
-      console.log('Waiting 1 second between requests...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Various YouTube URL patterns
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/,
+      /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        // Validate video ID format (11 characters, alphanumeric + _-)
+        if (/^[a-zA-Z0-9_-]{11}$/.test(match[1])) {
+          return match[1];
+        }
+      }
     }
+
+    return null;
+  } catch (error) {
+    console.error('URL validation error:', error);
+    return null;
+  }
+}
+
+// Step 2: Enhanced transcript extraction with metadata
+async function extractTranscript(videoId: string) {
+  try {
+    console.log(`🔍 Attempting to extract transcript for video: ${videoId}`);
     
-    const chunkAnalysis = await processChunkWithRetry(chunkPrompt, i + 1);
-    if (chunkAnalysis) {
-      chunkAnalyses.push(chunkAnalysis);
-      console.log(`Chunk ${i + 1} processed successfully`);
+    const response = await fetch(`https://api.apify.com/v2/acts/lhotanok~youtube-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        startUrls: [`https://www.youtube.com/watch?v=${videoId}`],
+        maxResults: 1,
+        subtitlesFormat: 'text',
+        subtitlesLangCodes: ['en', 'en-US', 'en-GB'],
+        verboseLog: false
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Apify API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('📊 Apify response received');
+
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      throw new Error('No data returned from Apify');
+    }
+
+    const videoData = data[0];
+    
+    // Extract transcript
+    let transcript = '';
+    if (videoData.subtitles && videoData.subtitles.length > 0) {
+      transcript = videoData.subtitles.join(' ');
+      console.log(`✅ Transcript found: ${transcript.length} characters`);
     } else {
-      console.error(`Failed to process chunk ${i + 1} after retries`);
-      chunkAnalyses.push(`[Error processing chunk ${i + 1}]`);
+      console.log('❌ No subtitles found in video data');
     }
+
+    // Extract metadata
+    const metadata = {
+      title: videoData.title || 'Unknown Title',
+      description: videoData.description || '',
+      thumbnail: videoData.thumbnail || '',
+      duration: videoData.duration || 0,
+      viewCount: videoData.viewCount || 0,
+      publishDate: videoData.publishDate || null,
+      channelName: videoData.channelName || 'Unknown Channel'
+    };
+
+    return {
+      transcript: transcript.trim(),
+      metadata
+    };
+
+  } catch (error) {
+    console.error('❌ Transcript extraction error:', error);
+    return {
+      transcript: null,
+      metadata: {
+        title: 'Unknown Title',
+        description: '',
+        thumbnail: '',
+        duration: 0,
+        viewCount: 0,
+        publishDate: null,
+        channelName: 'Unknown Channel'
+      }
+    };
   }
+}
+
+// Step 3: Enhanced AI processing with fallback
+async function processWithAI(transcript: string, analysisType: string, customRequest: string, metadata: any): Promise<string> {
+  console.log('🤖 Attempting analysis with OpenAI first...');
   
-  // Check if we have any successful chunk analyses
-  if (chunkAnalyses.length === 0) {
-    throw new Error('Failed to process any chunks of the transcript');
+  // Try OpenAI first
+  try {
+    const openAIResult = await processWithOpenAI(transcript, analysisType, customRequest, metadata);
+    console.log('✅ OpenAI analysis successful');
+    return openAIResult;
+  } catch (error) {
+    console.error('❌ OpenAI failed:', error);
+    console.log('🔄 Falling back to Gemini...');
   }
+
+  // Fallback to Gemini
+  try {
+    const geminiResult = await processWithGemini(transcript, analysisType, customRequest, metadata);
+    console.log('✅ Gemini analysis successful');
+    return geminiResult;
+  } catch (error) {
+    console.error('❌ Gemini also failed:', error);
+    throw new Error('Both OpenAI and Gemini failed to process the content. Please try again later.');
+  }
+}
+
+async function processWithOpenAI(transcript: string, analysisType: string, customRequest: string, metadata: any): Promise<string> {
+  const prompt = buildAnalysisPrompt(transcript, analysisType, customRequest, metadata);
   
-  console.log(`Successfully processed ${chunkAnalyses.length} chunks, combining results...`);
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openAIApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4.1-2025-04-14',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert video content analyzer. Your task is to provide detailed, well-structured analysis based on the user's requirements. 
+
+CRITICAL FORMATTING REQUIREMENTS:
+- Use proper markdown formatting with **bold**, *italic*, and clear headings
+- Structure content with # for main headings, ## for subheadings, ### for sub-subheadings
+- Use numbered lists (1. 2. 3.) and bullet points (- or •) where appropriate
+- Make the content scannable and easy to read
+- Bold important terms, key insights, and critical information
+- Use blockquotes (>) for important quotes or statements from the video
+
+Always provide comprehensive, actionable insights that justify the credit spent.`
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 16000
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI API error: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content;
+}
+
+async function processWithGemini(transcript: string, analysisType: string, customRequest: string, metadata: any): Promise<string> {
+  const prompt = buildAnalysisPrompt(transcript, analysisType, customRequest, metadata);
   
-  // Combine all chunk analyses
-  const finalPrompt = buildFinalCombinationPrompt(analysisType, customRequest, chunkAnalyses);
-  
-  const finalResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + geminiApiKey, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -229,201 +343,389 @@ async function processLongTranscript(
     body: JSON.stringify({
       contents: [{
         parts: [{
-          text: `You are an expert video content analyzer. Combine and synthesize the chunk analyses into a comprehensive final analysis.\n\n${finalPrompt}`
+          text: `You are an expert video content analyzer. Your task is to provide detailed, well-structured analysis based on the user's requirements.
+
+CRITICAL FORMATTING REQUIREMENTS:
+- Use proper markdown formatting with **bold**, *italic*, and clear headings
+- Structure content with # for main headings, ## for subheadings, ### for sub-subheadings  
+- Use numbered lists (1. 2. 3.) and bullet points (- or •) where appropriate
+- Make the content scannable and easy to read
+- Bold important terms, key insights, and critical information
+- Use blockquotes (>) for important quotes or statements from the video
+
+Always provide comprehensive, actionable insights that justify the credit spent.
+
+${prompt}`
         }]
       }],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 20000
+        maxOutputTokens: 16000
       }
     }),
   });
-  
-  if (!finalResponse.ok) {
-    const errorText = await finalResponse.text();
-    console.error('OpenAI API error for final analysis:', errorText);
-    throw new Error(`Failed to analyze content: ${errorText}`);
-  }
-  
-  // Save summary to database
-  const { data: summary, error: summaryError } = await supabase
-    .from('summaries')
-    .insert({
-      user_id: user.id,
-      youtube_url: youtubeUrl,
-      video_title: videoMetadata.title,
-      video_description: videoMetadata.description,
-      thumbnail_url: videoMetadata.thumbnail,
-      duration: videoMetadata.duration,
-      summary: 'Processing...', // Will be updated with actual content
-    })
-    .select()
-    .single();
 
-  if (summaryError) {
-    console.error('Failed to save summary:', summaryError);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API error: ${errorText}`);
   }
-  
-  return createStreamingResponse(finalResponse, summary, videoMetadata, supabase, true);
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, maxRetries: number = 3): Promise<string | null> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`Attempting to process chunk ${chunkNumber}, attempt ${attempt}/${maxRetries}`);
-      
-      const chunkResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + geminiApiKey, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `You are an expert video content analyzer. Analyze this chunk of content and provide detailed insights.\n\n${chunkPrompt}`
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 4000
-          }
-        }),
-      });
+// Step 4: Enhanced prompt building
+function buildAnalysisPrompt(transcript: string, analysisType: string, customRequest: string, metadata: any): string {
+  const videoInfo = `
+**Video Information:**
+- **Title:** ${metadata.title}
+- **Channel:** ${metadata.channelName}
+- **Duration:** ${Math.floor(metadata.duration / 60)} minutes
+- **Description:** ${metadata.description.substring(0, 200)}${metadata.description.length > 200 ? '...' : ''}
+`;
 
-      if (chunkResponse.ok) {
-        const chunkData = await chunkResponse.json();
-        const chunkAnalysis = chunkData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        return chunkAnalysis;
-      } else {
-        const errorText = await chunkResponse.text();
-        console.error(`Chunk ${chunkNumber} attempt ${attempt} failed:`, errorText);
-        
-        // Check if it's a rate limit error
-        if (errorText.includes('rate_limit_exceeded') && attempt < maxRetries) {
-          const waitTime = Math.min(20000, 3000 * attempt); // Shorter waits due to Gemini's rate limits
-          console.log(`Rate limit hit, waiting ${waitTime/1000} seconds before retry...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue;
-        }
-        
-        // For other errors or final attempt, return null
-        if (attempt === maxRetries) {
-          return null;
-        }
-      }
-    } catch (error) {
-      console.error(`Chunk ${chunkNumber} attempt ${attempt} error:`, error);
-      if (attempt === maxRetries) {
-        return null;
-      }
-      
-      // Wait before retry
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
+  const basePrompt = `${videoInfo}
+
+**Full Video Transcript:**
+${transcript}
+
+---
+
+`;
+
+  switch (analysisType) {
+    case 'summary':
+      return basePrompt + `
+**TASK: Comprehensive Video Summary**
+
+Create a detailed but concise summary of this video. Structure your response as follows:
+
+# 📝 Video Summary: ${metadata.title}
+
+## 🎯 Main Topic & Purpose
+- What is this video about?
+- What's the main goal or message?
+
+## 📋 Key Points (in order of importance)
+1. **[Most Important Point]** - Brief explanation
+2. **[Second Important Point]** - Brief explanation
+3. **[Third Important Point]** - Brief explanation
+(Continue as needed)
+
+## 💡 Main Takeaways
+- What should viewers remember?
+- What are the actionable insights?
+
+## 🎭 Style & Approach
+- How is the content presented?
+- What's the tone and format?
+
+Make it comprehensive yet digestible. Use bullet points and clear headings.`;
+
+    case 'key-takeaways':
+      return basePrompt + `
+**TASK: Key Takeaways & Insights**
+
+Extract the most valuable insights and actionable takeaways from this video.
+
+# 🚀 Key Takeaways: ${metadata.title}
+
+## 🎯 Top 5 Most Important Insights
+1. **[Insight 1]** - Why this matters and how to apply it
+2. **[Insight 2]** - Why this matters and how to apply it
+3. **[Insight 3]** - Why this matters and how to apply it
+4. **[Insight 4]** - Why this matters and how to apply it
+5. **[Insight 5]** - Why this matters and how to apply it
+
+## 💼 Practical Applications
+- How can these insights be implemented?
+- What are the next steps?
+
+## ⚡ Quick Reference
+- **Most important quote:** "[Key quote from video]"
+- **Key number/statistic:** [Important data point]
+- **Main recommendation:** [Primary advice given]
+
+Focus on actionable, valuable insights that justify watching the entire video.`;
+
+    case 'step-by-step':
+      return basePrompt + `
+**TASK: Step-by-Step Breakdown**
+
+Create a detailed, sequential breakdown of all processes, methods, and steps mentioned in the video.
+
+# 📋 Complete Step-by-Step Guide: ${metadata.title}
+
+## 🎯 Overview
+Brief description of what this process/method achieves.
+
+## 📝 Detailed Steps
+
+### Phase 1: [Phase Name]
+1. **Step 1:** [Detailed explanation]
+   - **Why:** [Rationale]
+   - **How:** [Specific instructions]
+   - **Tips:** [Additional advice]
+
+2. **Step 2:** [Detailed explanation]
+   - **Why:** [Rationale]
+   - **How:** [Specific instructions]
+   - **Tips:** [Additional advice]
+
+(Continue for all phases and steps)
+
+## ⚠️ Important Notes & Warnings
+- Common mistakes to avoid
+- Critical considerations
+
+## ✅ Success Indicators
+- How to know you're doing it right
+- Expected outcomes at each stage
+
+Make it actionable and complete - someone should be able to follow this without watching the video.`;
+
+    case 'general-explanation':
+      return basePrompt + `
+**TASK: Clear Educational Explanation**
+
+Explain all concepts, topics, and ideas discussed in this video in a clear, educational manner.
+
+# 🎓 Complete Explanation: ${metadata.title}
+
+## 📖 Main Concepts Explained
+
+### Concept 1: [Name]
+- **Definition:** [What it is]
+- **Why it matters:** [Importance]
+- **How it works:** [Mechanism/process]
+- **Examples:** [Real-world applications]
+
+### Concept 2: [Name]
+- **Definition:** [What it is]
+- **Why it matters:** [Importance]
+- **How it works:** [Mechanism/process]
+- **Examples:** [Real-world applications]
+
+(Continue for all major concepts)
+
+## 🔗 How Everything Connects
+- Relationship between concepts
+- The bigger picture
+
+## 🤔 Common Questions & Clarifications
+- Address potential confusion
+- Clarify complex points
+
+## 📚 Additional Context
+- Background information
+- Related topics mentioned
+
+Make complex topics accessible to beginners while maintaining depth.`;
+
+    case 'tech-review':
+      return basePrompt + `
+**TASK: Technical Analysis & Review**
+
+Provide a comprehensive technical analysis of all technology, tools, methods, and technical concepts discussed.
+
+# 🔧 Technical Review: ${metadata.title}
+
+## 🛠️ Technologies/Tools Mentioned
+
+### [Technology/Tool 1]
+- **What it is:** [Description]
+- **Use case:** [When to use it]
+- **Pros:** [Advantages]
+- **Cons:** [Limitations]
+- **Alternatives:** [Other options]
+- **Difficulty level:** [Beginner/Intermediate/Advanced]
+
+(Continue for each technology)
+
+## ⚖️ Technical Evaluation
+
+### Strengths
+- What works well
+- Innovative aspects
+- Best practices demonstrated
+
+### Weaknesses
+- Potential issues
+- Missing considerations
+- Outdated information
+
+## 🎯 Technical Recommendations
+- Who should use these techniques
+- When to implement
+- Prerequisites needed
+
+## 🔍 Deep Dive Analysis
+- Technical accuracy assessment
+- Industry relevance
+- Future-proofing considerations
+
+Focus on technical merit, practicality, and real-world applicability.`;
+
+    case 'custom':
+      return basePrompt + `
+**CUSTOM ANALYSIS REQUEST:** ${customRequest}
+
+Based on the specific request above, analyze the video content and provide detailed insights that directly address what was asked for.
+
+# 🎯 Custom Analysis: ${metadata.title}
+
+## 📋 Specific Focus: ${customRequest}
+
+[Provide detailed analysis specifically targeting the custom request]
+
+## 🔍 Relevant Information Found
+- Direct answers to the request
+- Related insights
+- Supporting evidence from the video
+
+## 💡 Additional Insights
+- Unexpected relevant information
+- Broader context that supports the request
+
+## 📝 Summary & Recommendations
+- Key findings related to the request
+- Next steps or recommendations
+
+Structure your response to directly address the custom request while providing comprehensive value.`;
+
+    default:
+      return basePrompt + `
+**TASK: General Analysis**
+
+Provide a comprehensive analysis of this video content.
+
+# 📊 Video Analysis: ${metadata.title}
+
+## 🎯 Content Overview
+[Main topics and themes]
+
+## 💡 Key Insights
+[Important information and takeaways]
+
+## 📋 Detailed Breakdown
+[Structured analysis of content]
+
+## 🎭 Presentation & Style
+[How content is delivered]
+
+## 🔗 Relevance & Value
+[Why this content matters]
+
+Provide thorough, valuable analysis that justifies the viewer's time investment.`;
   }
-  
-  return null;
 }
 
-function createStreamingResponse(apiResponse: Response, summary: any, videoMetadata: any, supabase: any, isGemini: boolean = false) {
+// Step 5: Enhanced output formatting
+function formatAnalysisOutput(content: string, analysisType: string, metadata: any): string {
+  // Add timestamp and video information header
+  const header = `# 🎬 Analysis Complete
+
+**Video:** [${metadata.title}](https://youtube.com/watch?v=${extractVideoIdFromUrl(metadata.url) || ''})  
+**Channel:** ${metadata.channelName}  
+**Analyzed:** ${new Date().toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })}
+
+---
+
+`;
+
+  // Clean and enhance the content
+  let formattedContent = content;
+  
+  // Ensure proper heading hierarchy
+  formattedContent = formattedContent.replace(/^#{4,}/gm, '###');
+  
+  // Enhance bullet points
+  formattedContent = formattedContent.replace(/^[-•]\s/gm, '• ');
+  
+  // Ensure proper spacing around headings
+  formattedContent = formattedContent.replace(/^(#{1,3}\s.+)$/gm, '\n$1\n');
+  
+  // Clean up multiple newlines
+  formattedContent = formattedContent.replace(/\n{3,}/g, '\n\n');
+  
+  // Add analysis type badge
+  const typeBadge = getAnalysisTypeBadge(analysisType);
+  
+  return header + typeBadge + '\n\n' + formattedContent.trim();
+}
+
+function getAnalysisTypeBadge(analysisType: string): string {
+  const badges = {
+    'summary': '📋 **Analysis Type:** Summary',
+    'key-takeaways': '💡 **Analysis Type:** Key Takeaways',
+    'step-by-step': '📝 **Analysis Type:** Step-by-Step Guide',
+    'general-explanation': '🎓 **Analysis Type:** Educational Explanation',
+    'tech-review': '🔧 **Analysis Type:** Technical Review',
+    'custom': '🎯 **Analysis Type:** Custom Analysis'
+  };
+  
+  return badges[analysisType] || '📊 **Analysis Type:** General Analysis';
+}
+
+function extractVideoIdFromUrl(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
+// Step 6: Enhanced streaming response
+function createStreamingResponse(content: string, summary: any, videoMetadata: any) {
   const stream = new ReadableStream({
     async start(controller) {
-      const reader = apiResponse.body?.getReader();
-      if (!reader) {
-        controller.close();
-        return;
-      }
-
-      let fullContent = '';
-      let streamClosed = false;
-      const decoder = new TextDecoder();
-
-      const closeStream = async () => {
-        if (streamClosed) return;
-        streamClosed = true;
-        
-        try {
-          // Update summary with final content
-          if (summary && fullContent) {
-            await supabase
-              .from('summaries')
-              .update({ summary: fullContent })
-              .eq('id', summary.id);
-          }
-          controller.close();
-        } catch (error) {
-          console.error('Error closing stream:', error);
-          if (!streamClosed) {
-            controller.error(error);
-          }
-        }
-      };
-
       try {
-        if (isGemini) {
-          // For Gemini, we get a single response, not streaming
-          const geminiData = await apiResponse.json();
-          const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          fullContent = content;
+        // Send video metadata first
+        const metadataChunk = JSON.stringify({ 
+          videoMetadata, 
+          summaryId: summary?.id 
+        });
+        controller.enqueue(new TextEncoder().encode(`data: ${metadataChunk}\n\n`));
+
+        // Stream content in natural chunks
+        const sentences = content.split(/(?<=[.!?])\s+/);
+        let accumulatedContent = '';
+
+        for (let i = 0; i < sentences.length; i++) {
+          accumulatedContent += sentences[i] + ' ';
           
-          // Send the content in chunks to simulate streaming
-          const chunkSize = 50;
-          for (let i = 0; i < content.length; i += chunkSize) {
-            const chunk = content.slice(i, i + chunkSize);
-            if (!streamClosed) {
-              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content: chunk, videoMetadata, summaryId: summary?.id })}\n\n`));
-            }
-            // Small delay to simulate streaming
-            await new Promise(resolve => setTimeout(resolve, 10));
-          }
-          
-          await closeStream();
-        } else {
-          // Original OpenAI streaming logic
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              await closeStream();
-              break;
-            }
-
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data === '[DONE]') {
-                  await closeStream();
-                  return;
-                }
-
-                try {
-                  const parsed = JSON.parse(data);
-                  const content = parsed.choices?.[0]?.delta?.content;
-                  if (content && !streamClosed) {
-                    fullContent += content;
-                    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content, videoMetadata, summaryId: summary?.id })}\n\n`));
-                  }
-                } catch (e) {
-                  // Skip invalid JSON
-                }
-              }
-            }
+          // Send chunk every few sentences or at natural breaks
+          if (i % 3 === 0 || sentences[i].match(/[.!?]$/)) {
+            const chunk = JSON.stringify({ 
+              content: accumulatedContent,
+              videoMetadata,
+              summaryId: summary?.id 
+            });
+            controller.enqueue(new TextEncoder().encode(`data: ${chunk}\n\n`));
+            
+            // Natural delay for better UX
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
         }
+
+        // Send final chunk with any remaining content
+        if (accumulatedContent.length < content.length) {
+          const finalChunk = JSON.stringify({ 
+            content: content,
+            videoMetadata,
+            summaryId: summary?.id 
+          });
+          controller.enqueue(new TextEncoder().encode(`data: ${finalChunk}\n\n`));
+        }
+
+        controller.close();
       } catch (error) {
         console.error('Streaming error:', error);
-        if (!streamClosed) {
-          streamClosed = true;
-          controller.error(error);
-        }
-      } finally {
-        try {
-          await reader.releaseLock();
-        } catch (e) {
-          // Reader might already be released
-        }
+        controller.error(error);
       }
     }
   });
@@ -436,226 +738,4 @@ function createStreamingResponse(apiResponse: Response, summary: any, videoMetad
       'Connection': 'keep-alive',
     },
   });
-}
-
-function splitTranscriptIntoChunks(transcript: string, maxChunkSize: number): string[] {
-  const chunks: string[] = [];
-  const sentences = transcript.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  
-  let currentChunk = '';
-  
-  for (const sentence of sentences) {
-    const potentialChunk = currentChunk + sentence + '. ';
-    
-    if (potentialChunk.length > maxChunkSize && currentChunk.length > 0) {
-      chunks.push(currentChunk.trim());
-      currentChunk = sentence + '. ';
-    } else {
-      currentChunk = potentialChunk;
-    }
-  }
-  
-  if (currentChunk.trim().length > 0) {
-    chunks.push(currentChunk.trim());
-  }
-  
-  return chunks;
-}
-
-function buildChunkAnalysisPrompt(analysisType: string, customRequest: string, chunk: string, chunkNumber: number, totalChunks: number): string {
-  const basePrompt = `Analyze this section (part ${chunkNumber} of ${totalChunks}) of a video transcript:\n\n${chunk}\n\n`;
-  
-  switch (analysisType) {
-    case 'summary':
-      return basePrompt + 'Extract the key points and main ideas from this section. Focus on the most important information.';
-    
-    case 'key-takeaways':
-      return basePrompt + 'Identify any important takeaways, insights, or lessons from this section.';
-    
-    case 'step-by-step':
-      return basePrompt + 'Identify any steps, processes, or methodologies mentioned in this section.';
-    
-    case 'general-explanation':
-      return basePrompt + 'Explain the main concepts and topics discussed in this section.';
-    
-    case 'tech-review':
-      return basePrompt + 'Provide technical analysis for this section, including details, pros/cons, and insights.';
-    
-    case 'custom':
-      return basePrompt + `Focus on this specific request: "${customRequest}". Extract any information from this section that relates to this request.`;
-    
-    default:
-      return basePrompt + 'Analyze the main content and themes in this section.';
-  }
-}
-
-function buildFinalCombinationPrompt(analysisType: string, customRequest: string, chunkAnalyses: string[]): string {
-  const combinedAnalyses = chunkAnalyses.map((analysis, index) => 
-    `--- Section ${index + 1} Analysis ---\n${analysis}\n`
-  ).join('\n');
-  
-  const basePrompt = `I have analyzed a long video transcript in sections. Here are the individual section analyses:\n\n${combinedAnalyses}\n\n`;
-  
-  switch (analysisType) {
-    case 'summary':
-      return basePrompt + 'Please combine these section analyses into a comprehensive, well-structured summary of the entire video. Organize the content logically and highlight the most important points.';
-    
-    case 'key-takeaways':
-      return basePrompt + 'Please combine these section analyses and extract the most important key takeaways and insights from the entire video. Present them as a clear, organized list.';
-    
-    case 'step-by-step':
-      return basePrompt + 'Please combine these section analyses and create a comprehensive step-by-step breakdown of all processes and methodologies mentioned throughout the video.';
-    
-    case 'general-explanation':
-      return basePrompt + 'Please combine these section analyses into a clear, comprehensive explanation of all concepts and topics discussed in the video.';
-    
-    case 'tech-review':
-      return basePrompt + 'Please combine these section analyses into a comprehensive technical review of the entire video content, including all technical details, pros/cons, and expert insights.';
-    
-    case 'custom':
-      return basePrompt + `Please combine these section analyses to provide a comprehensive response to this specific request: "${customRequest}". Focus on synthesizing all relevant information from across the video to address what was asked for.`;
-    
-    default:
-      return basePrompt + 'Please combine these section analyses into a comprehensive analysis of the entire video content.';
-  }
-}
-
-function extractVideoId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-  ];
-  
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
-}
-
-async function scrapeTranscript(videoId: string): Promise<string | null> {
-  try {
-    console.log('Calling Apify API for video ID:', videoId);
-    const apifyUrl = `https://api.apify.com/v2/acts/pintostudio~youtube-transcript-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`;
-    
-    const requestBody = {
-      videoUrl: `https://www.youtube.com/watch?v=${videoId}`
-    };
-    
-    console.log('Apify request body:', JSON.stringify(requestBody));
-    
-    const response = await fetch(apifyUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    console.log('Apify response status:', response.status);
-    console.log('Apify response headers:', Object.fromEntries(response.headers.entries()));
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Apify API error details:', errorText);
-      return null;
-    }
-
-    const data = await response.json();
-    console.log('Full Apify response data:', JSON.stringify(data, null, 2));
-    
-    if (!data || data.length === 0) {
-      console.log('Empty data array returned from Apify for video:', videoId);
-      return null;
-    }
-
-    const firstItem = data[0];
-    console.log('First item structure:', Object.keys(firstItem || {}));
-    console.log('First item data:', JSON.stringify(firstItem, null, 2));
-
-    const transcriptData = firstItem?.data;
-    if (!transcriptData || !Array.isArray(transcriptData)) {
-      console.log('No transcript data array found in response');
-      return null;
-    }
-
-    // Filter out items without text and extract text content
-    const textItems = transcriptData.filter(item => item?.text);
-    
-    if (textItems.length === 0) {
-      console.log('No text items found in transcript data');
-      return null;
-    }
-
-    // Join all text segments
-    const joinedTranscript = textItems.map(item => item.text).join(' ');
-    
-    console.log('Extracted transcript length:', joinedTranscript.length);
-    console.log('First 200 characters:', joinedTranscript.substring(0, 200));
-    
-    return joinedTranscript;
-
-    console.log('Transcript is neither string nor array:', typeof transcript);
-    return null;
-  } catch (error) {
-    console.error('Error scraping transcript:', error);
-    return null;
-  }
-}
-
-async function getVideoMetadata(videoId: string) {
-  try {
-    // Use oEmbed API to get real YouTube metadata
-    const oEmbedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-    
-    const response = await fetch(oEmbedUrl);
-    if (!response.ok) {
-      throw new Error('Failed to fetch metadata');
-    }
-    
-    const data = await response.json();
-    
-    return {
-      title: data.title || 'Unknown Title',
-      description: data.author_name || '',
-      thumbnail: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-      duration: 0
-    };
-  } catch (error) {
-    console.error('Error getting video metadata:', error);
-    return {
-      title: 'Unknown Title',
-      description: '',
-      thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-      duration: 0
-    };
-  }
-}
-
-function buildAnalysisPrompt(analysisType: string, customRequest: string, transcript: string): string {
-  const basePrompt = `Please analyze the following video transcript:\n\n${transcript}\n\n`;
-  
-  switch (analysisType) {
-    case 'summary':
-      return basePrompt + 'Provide a comprehensive summary of the main points and key information covered in this video.';
-    
-    case 'key-takeaways':
-      return basePrompt + 'Extract and list the most important key takeaways and insights from this video.';
-    
-    case 'step-by-step':
-      return basePrompt + 'Break down all the steps, processes, or methodologies mentioned in this video in a detailed, sequential manner.';
-    
-    case 'general-explanation':
-      return basePrompt + 'Provide a clear, simple explanation of the concepts and topics discussed in this video.';
-    
-    case 'tech-review':
-      return basePrompt + 'Provide a technical analysis and review of the content, including technical details, pros/cons, and expert insights.';
-    
-    case 'custom':
-      return basePrompt + `I need you to focus specifically on: "${customRequest}". 
-
-Please provide a detailed, focused analysis that directly addresses this request. Structure your response clearly and provide specific examples, quotes, or details from the transcript that relate to what I'm asking for. If the transcript doesn't contain information about my specific request, please clearly state that and suggest what related information is available instead.`;
-    
-    default:
-      return basePrompt + 'Provide a comprehensive analysis of this video content.';
-  }
 }
