@@ -251,20 +251,13 @@ export function YouTubeInput() {
       </div>
 
       {step === "request" ? (
-        <form onSubmit={handleRequestSubmit} className="space-y-4">
-          <div className="space-y-4">
-            <Label className="text-lg font-medium">What do you need from the video?</Label>
+        <form onSubmit={handleRequestSubmit} className="space-y-6">
+          <div className="space-y-3">
             <Textarea
-              placeholder="Describe exactly what you want to extract from the video... 
-              
-Examples:
-• Summarize the main points discussed
-• Extract all the technical concepts mentioned
-• List the step-by-step process explained
-• What are the key takeaways for beginners?"
+              placeholder="Ask anything or describe what you need from the video..."
               value={userRequest}
               onChange={(e) => setUserRequest(e.target.value)}
-              className="min-h-32 text-base leading-relaxed resize-none"
+              className="min-h-20 text-base leading-relaxed resize-none border-0 bg-card/50 rounded-2xl px-6 py-4 placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-border focus-visible:ring-offset-0 shadow-sm backdrop-blur-sm"
               disabled={isLoading}
             />
           </div>
@@ -272,9 +265,9 @@ Examples:
           <Button
             type="submit"
             disabled={!userRequest.trim() || isLoading}
-            className="w-full h-12 text-lg font-medium"
+            className="w-full h-12 text-base font-medium rounded-xl bg-primary/90 hover:bg-primary shadow-sm transition-all duration-200"
           >
-            <Play className="h-5 w-5 mr-2" />
+            <Play className="h-4 w-4 mr-2" />
             Continue
           </Button>
         </form>
