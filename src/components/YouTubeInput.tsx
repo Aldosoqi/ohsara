@@ -2,28 +2,19 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Play, Loader2, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/hooks/useSettings";
 import { useNotifications } from "@/hooks/useNotifications";
-
-const analysisOptions = [
-  { id: "summary", label: "Summary", description: "Get a concise overview of the main points" },
-  { id: "key-takeaways", label: "Key Takeaways", description: "Extract the most important insights" },
-  { id: "step-by-step", label: "All Steps", description: "Detailed breakdown of all processes" },
-  { id: "general-explanation", label: "General Explanation", description: "Simple explanation of concepts" },
-  { id: "tech-review", label: "Tech Review", description: "Technical analysis and evaluation" },
-  { id: "custom", label: "Custom", description: "Specify your own requirements" }
-];
 
 export function YouTubeInput() {
   const { requestNotifications } = useSettings();
   const { showRequestCompleteNotification } = useNotifications();
   
   const [url, setUrl] = useState("");
-  const [step, setStep] = useState<"url" | "options" | "processing" | "results">("url");
-  const [selectedOption, setSelectedOption] = useState("");
-  const [customRequest, setCustomRequest] = useState("");
+  const [step, setStep] = useState<"request" | "url" | "processing" | "results">("request");
+  const [userRequest, setUserRequest] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [finalResult, setFinalResult] = useState("");
@@ -42,7 +33,7 @@ export function YouTubeInput() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Check for existing requests on mount and before new requests
+  // Clean up old incomplete summaries on mount
   useEffect(() => {
     const checkExistingRequests = async () => {
       try {
@@ -80,135 +71,19 @@ export function YouTubeInput() {
     checkExistingRequests();
   }, []);
 
-  // Function to check if URL already has a completed summary
-  const checkExistingSummary = async (youtubeUrl: string) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) return null;
-
-      const { data: existingSummary } = await supabase
-        .from('summaries')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .eq('youtube_url', youtubeUrl)
-        .not('summary', 'eq', '')
-        .not('summary', 'is', null)
-        .not('summary', 'eq', 'Processing...')  // Exclude incomplete processing
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      return existingSummary;
-    } catch (error) {
-      console.error('Error checking existing summary:', error);
-      return null;
-    }
-  };
-
-  const continueProcessing = async (youtubeUrl: string, summaryId: string) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const streamResponse = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/process-youtube`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
-        },
-        body: JSON.stringify({
-          youtubeUrl: youtubeUrl,
-          analysisType: 'summary', // Default for resumed requests
-          summaryId: summaryId
-        })
-      });
-
-      if (!streamResponse.ok) {
-        throw new Error('Failed to resume processing');
-      }
-
-      const reader = streamResponse.body?.getReader();
-      if (!reader) {
-        throw new Error('No readable stream available');
-      }
-
-      const decoder = new TextDecoder();
-      let result = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                result += parsed.content;
-                setStreamingContent(result);
-              }
-              if (parsed.videoMetadata) {
-                setVideoMetadata(parsed.videoMetadata);
-              }
-            } catch (e) {
-              // Skip invalid JSON
-            }
-          }
-        }
-      }
-
-      // Update the summary in the database
-      await supabase
-        .from('summaries')
-        .update({ 
-          summary: result,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', summaryId);
-
-      setFinalResult(result);
-      setStep("results");
-      setIsLoading(false);
-      
-      // Show notification if user left the page during processing
-      if (!pageVisible && requestNotifications) {
-        showRequestCompleteNotification(videoMetadata?.title);
-      }
-    } catch (error) {
-      console.error('Error continuing processing:', error);
-      setStep("processing");
-      setStreamingContent("Sorry, there are too many requests. Please try again later. Your credit has been refunded.");
-      setIsLoading(false);
-    }
+  const handleRequestSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userRequest.trim()) return;
+    setStep("url");
   };
 
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValidUrl || isLoading) return;
-    setStep("options");
+    processVideo();
   };
 
-  const handleAnalysisSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedOption) return;
-
-    // Check if this URL already has a completed summary
-    const existingSummary = await checkExistingSummary(url);
-    if (existingSummary) {
-      // Show existing summary instead of creating a new one
-      setFinalResult(existingSummary.summary);
-      setVideoMetadata({
-        title: existingSummary.video_title,
-        thumbnail: existingSummary.thumbnail_url
-      });
-      setStep("results");
-      return;
-    }
-
+  const processVideo = async () => {
     // Clear previous results before starting new request
     setStreamingContent("");
     setFinalResult("");
@@ -247,8 +122,7 @@ export function YouTubeInput() {
         },
         body: JSON.stringify({
           youtubeUrl: url,
-          analysisType: selectedOption,
-          customRequest: customRequest
+          userRequest: userRequest
         })
       });
 
@@ -345,11 +219,21 @@ export function YouTubeInput() {
     }
   };
 
-  const goBack = () => {
+  const goBackToRequest = () => {
+    setStep("request");
+    setUserRequest("");
+    setUrl("");
+    setIsLoading(false);
+    setStreamingContent("");
+    setFinalResult("");
+    setVideoMetadata(null);
+    setError("");
+  };
+
+  const goBackToUrl = () => {
     setStep("url");
-    setSelectedOption("");
-    setCustomRequest("");
-    setIsLoading(false); // Reset loading state when going back
+    setUrl("");
+    setIsLoading(false);
     setStreamingContent("");
     setFinalResult("");
     setVideoMetadata(null);
@@ -366,118 +250,84 @@ export function YouTubeInput() {
         </h1>
       </div>
 
-{step === "url" ? (
-        <form onSubmit={handleUrlSubmit} className="space-y-4">
-          <div className="relative">
-            <Input
-              type="url"
-              placeholder="Paste a YouTube URL to get its core knowledge..."
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="h-14 text-lg px-6 pr-32 rounded-xl border-2 border-border 
-                       focus:border-primary focus:ring-primary focus:ring-2 focus:ring-opacity-20
-                       bg-card shadow-subtle transition-all duration-200"
+      {step === "request" ? (
+        <form onSubmit={handleRequestSubmit} className="space-y-4">
+          <div className="space-y-4">
+            <Label className="text-lg font-medium">What do you need from the video?</Label>
+            <Textarea
+              placeholder="Describe exactly what you want to extract from the video... 
+              
+Examples:
+• Summarize the main points discussed
+• Extract all the technical concepts mentioned
+• List the step-by-step process explained
+• What are the key takeaways for beginners?"
+              value={userRequest}
+              onChange={(e) => setUserRequest(e.target.value)}
+              className="min-h-32 text-base leading-relaxed resize-none"
               disabled={isLoading}
             />
-            
-            <Button
-              type="submit"
-              disabled={!isValidUrl || isLoading}
-              className="absolute right-2 top-2 h-10 px-6 rounded-lg bg-primary hover:bg-primary/90 
-                       text-primary-foreground font-medium transition-all duration-200
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Continue
-            </Button>
           </div>
 
-          {url && !isValidUrl && (
-            <p className="text-sm text-destructive text-center">
-              Please enter a valid YouTube URL
-            </p>
-          )}
+          <Button
+            type="submit"
+            disabled={!userRequest.trim() || isLoading}
+            className="w-full h-12 text-lg font-medium"
+          >
+            <Play className="h-5 w-5 mr-2" />
+            Continue
+          </Button>
         </form>
-      ) : step === "options" ? (
+      ) : step === "url" ? (
         <div className="space-y-6">
           <div className="flex items-center gap-4 mb-6">
             <Button
               variant="ghost"
               size="sm"
-              onClick={goBack}
+              onClick={goBackToRequest}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
               Back
             </Button>
-            <div className="text-sm text-muted-foreground truncate">
-              {url}
+            <div className="text-sm text-muted-foreground">
+              Looking for: {userRequest.length > 50 ? userRequest.substring(0, 50) + "..." : userRequest}
             </div>
           </div>
 
-          <form onSubmit={handleAnalysisSubmit} className="space-y-6">
+          <form onSubmit={handleUrlSubmit} className="space-y-4">
             <div className="space-y-4">
-              <Label className="text-lg font-medium">What do you need from this video?</Label>
-              
-              <div className="grid gap-3">
-                {analysisOptions.map((option) => (
-                  <label
-                    key={option.id}
-                    className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
-                      selectedOption === option.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50 hover:bg-accent/50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="analysisType"
-                      value={option.id}
-                      checked={selectedOption === option.id}
-                      onChange={(e) => setSelectedOption(e.target.value)}
-                      className="mt-1"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-foreground">{option.label}</div>
-                      <div className="text-sm text-muted-foreground">{option.description}</div>
-                    </div>
-                  </label>
-                ))}
+              <Label className="text-lg font-medium">Paste the YouTube URL</Label>
+              <div className="relative">
+                <Input
+                  type="url"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="h-14 text-lg px-6 pr-32 rounded-xl border-2 border-border 
+                           focus:border-primary focus:ring-primary focus:ring-2 focus:ring-opacity-20
+                           bg-card shadow-subtle transition-all duration-200"
+                  disabled={isLoading}
+                />
+                
+                <Button
+                  type="submit"
+                  disabled={!isValidUrl || isLoading}
+                  className="absolute right-2 top-2 h-10 px-6 rounded-lg bg-primary hover:bg-primary/90 
+                           text-primary-foreground font-medium transition-all duration-200
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Process
+                </Button>
               </div>
 
-              {selectedOption === "custom" && (
-                <div className="mt-4">
-                  <Label htmlFor="customRequest" className="text-sm font-medium">
-                    Describe what you need:
-                  </Label>
-                  <Input
-                    id="customRequest"
-                    value={customRequest}
-                    onChange={(e) => setCustomRequest(e.target.value)}
-                    placeholder="E.g., Focus on the marketing strategies mentioned..."
-                    className="mt-2"
-                  />
-                </div>
+              {url && !isValidUrl && (
+                <p className="text-sm text-destructive text-center">
+                  Please enter a valid YouTube URL
+                </p>
               )}
             </div>
-
-            <Button
-              type="submit"
-              disabled={!selectedOption || isLoading || (selectedOption === "custom" && !customRequest.trim())}
-              className="w-full h-12 text-lg font-medium"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Play className="h-5 w-5 mr-2" />
-                  Analyze Video
-                </>
-              )}
-            </Button>
           </form>
         </div>
       ) : step === "processing" ? (
@@ -485,7 +335,11 @@ export function YouTubeInput() {
           <div className="text-center space-y-4">
             <div className="flex items-center justify-center gap-2">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <span className="text-lg font-medium">Analyzing video...</span>
+              <span className="text-lg font-medium">Processing video...</span>
+            </div>
+            
+            <div className="text-sm text-muted-foreground">
+              Extracting transcript and analyzing: {userRequest.length > 60 ? userRequest.substring(0, 60) + "..." : userRequest}
             </div>
             
             {videoMetadata && (
@@ -516,7 +370,7 @@ export function YouTubeInput() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setStep("url")}
+            onClick={goBackToRequest}
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -556,7 +410,6 @@ export function YouTubeInput() {
           </div>
         </div>
       ) : null}
-
 
       {/* Loading progress bar */}
       {isLoading && (
