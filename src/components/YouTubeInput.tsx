@@ -49,51 +49,28 @@ export function YouTubeInput() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user?.id) return;
 
-        // Get the most recent incomplete summary (empty, null, or still processing)
-        const { data: incompleteSummary } = await supabase
+        // Clean up old incomplete summaries (older than 10 minutes)
+        const { data: incompleteSummaries } = await supabase
           .from('summaries')
           .select('*')
           .eq('user_id', session.user.id)
           .or('summary.eq.,summary.is.null,summary.eq.Processing...')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .order('created_at', { ascending: false });
 
-        if (incompleteSummary) {
-          // Check if the request is recent (within last 10 minutes)
-          const requestTime = new Date(incompleteSummary.created_at).getTime();
+        if (incompleteSummaries && incompleteSummaries.length > 0) {
           const now = new Date().getTime();
           const tenMinutesAgo = now - (10 * 60 * 1000);
           
-          if (requestTime < tenMinutesAgo) {
-            console.log('Found old incomplete request, cleaning up to avoid duplicate processing');
-            // Delete old incomplete request to prevent future duplicates
-            await supabase
-              .from('summaries')
-              .delete()
-              .eq('id', incompleteSummary.id);
-            return;
+          for (const summary of incompleteSummaries) {
+            const requestTime = new Date(summary.created_at).getTime();
+            if (requestTime < tenMinutesAgo) {
+              console.log('Cleaning up old incomplete request:', summary.id);
+              await supabase
+                .from('summaries')
+                .delete()
+                .eq('id', summary.id);
+            }
           }
-          
-          console.log('Found recent incomplete request, resuming...', incompleteSummary);
-          
-          // Resume the incomplete request
-          setUrl(incompleteSummary.youtube_url);
-          setCurrentSummaryId(incompleteSummary.id);
-          setStep("processing");
-          setIsLoading(true);
-          
-          if (incompleteSummary.video_title) {
-            setVideoMetadata({
-              title: incompleteSummary.video_title,
-              thumbnail: incompleteSummary.thumbnail_url
-            });
-          }
-          
-          setStreamingContent("Resuming your previous request...");
-          
-          // Continue processing from where it left off
-          await continueProcessing(incompleteSummary.youtube_url, incompleteSummary.id);
         }
       } catch (error) {
         console.error('Error checking existing requests:', error);
