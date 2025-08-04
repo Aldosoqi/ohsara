@@ -248,10 +248,10 @@ serve(async (req) => {
             // Extract transcript
             const transcriptData = await extractTranscript(youtubeUrl);
             
-            // Update video metadata with actual title
+            // Update video metadata with actual title from transcript data
             const updatedMetadata = {
               ...videoMetadata,
-              title: transcriptData.title
+              title: transcriptData.title || videoMetadata.title || 'YouTube Video'
             };
             
             const updatedMetadataChunk = `data: ${JSON.stringify({ videoMetadata: updatedMetadata })}\n\n`;
