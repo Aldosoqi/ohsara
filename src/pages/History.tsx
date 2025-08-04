@@ -168,16 +168,14 @@ const History = () => {
                 key={summary.id}
                 className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow"
               >
-                <div className="flex gap-4">
-                  {summary.thumbnail_url && (
-                    <div className="flex-shrink-0">
-                      <img
-                        src={summary.thumbnail_url}
-                        alt="Video thumbnail"
-                        className="w-32 h-18 object-cover rounded-lg"
-                      />
-                    </div>
-                  )}
+                <div className="flex gap-6">
+                  <div className="flex-shrink-0">
+                    <img
+                      src={summary.thumbnail_url || '/placeholder.svg'}
+                      alt="Video thumbnail"
+                      className="w-40 h-24 object-cover rounded-lg border border-border"
+                    />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between mb-2">
                       <h3 className="text-lg font-semibold text-foreground line-clamp-2">
