@@ -235,9 +235,13 @@ export function YouTubeInput() {
       return;
     }
 
+    console.log('🔍 Starting to check existing summary...');
     // Check if this URL already has a completed summary
     const existingSummary = await checkExistingSummary(url);
+    console.log('🔍 Existing summary check result:', existingSummary);
+    
     if (existingSummary) {
+      console.log('✅ Found existing summary, showing it instead of creating new one');
       // Show existing summary instead of creating a new one
       setFinalResult(existingSummary.summary);
       setVideoMetadata({
@@ -248,18 +252,23 @@ export function YouTubeInput() {
       return;
     }
 
+    console.log('🧹 Clearing previous results...');
     // Clear previous results before starting new request
     setStreamingContent("");
     setFinalResult("");
     setVideoMetadata(null);
     setError("");
 
+    console.log('🚀 Setting loading state and step to processing...');
     setIsLoading(true);
     setStep("processing");
     
     try {
+      console.log('🔑 Getting session...');
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('🔑 Session result:', session ? 'Found' : 'Not found');
       
+      console.log('📝 Creating new summary record...');
       // Create a new summary record in the database first
       const { data: newSummary, error: summaryError } = await supabase
         .from('summaries')
@@ -275,8 +284,10 @@ export function YouTubeInput() {
         throw new Error('Failed to create summary record');
       }
 
+      console.log('🎬 Summary record created:', newSummary.id);
       setCurrentSummaryId(newSummary.id);
       
+      console.log('🌐 Making API call to process-youtube function...');
       const streamResponse = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/process-youtube`, {
         method: 'POST',
         headers: {
@@ -290,6 +301,8 @@ export function YouTubeInput() {
           customRequest: customRequest
         })
       });
+
+      console.log('🌐 API response received:', streamResponse.status, streamResponse.statusText);
 
       if (!streamResponse.ok) {
         const errorData = await streamResponse.json().catch(() => ({ error: 'Edge Function returned a non-2xx status code' }));
