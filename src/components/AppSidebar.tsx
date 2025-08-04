@@ -46,16 +46,14 @@ export function AppSidebar() {
                       end
                       className={({ isActive }) => {
                         if (item.title === "Upgrade") {
-                          return `nav-item relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 rounded-lg ${
+                          return `relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 rounded-lg px-3 py-2 ${
                             isActive ? "nav-item-active" : ""
                           }`;
                         }
                         return `nav-item ${isActive ? "nav-item-active" : ""}`;
                       }}
                     >
-                      {item.title === "Upgrade" && (
-                        <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 opacity-100 animate-pulse"></div>
-                      )}
+
                       <item.icon 
                         className={`h-5 w-5 flex-shrink-0 relative z-10 ${
                           item.title === "Upgrade" ? "text-yellow-300 drop-shadow-sm" : ""
