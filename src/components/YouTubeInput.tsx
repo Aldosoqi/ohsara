@@ -252,24 +252,22 @@ export function YouTubeInput() {
 
       {step === "request" ? (
         <form onSubmit={handleRequestSubmit} className="space-y-6">
-          <div className="space-y-3">
+          <div className="relative">
             <Textarea
               placeholder="Ask anything or describe what you need from the video..."
               value={userRequest}
               onChange={(e) => setUserRequest(e.target.value)}
-              className="min-h-20 text-base leading-relaxed resize-none border-0 bg-card/50 rounded-2xl px-6 py-4 placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-border focus-visible:ring-offset-0 shadow-sm backdrop-blur-sm"
+              className="min-h-20 text-base leading-relaxed resize-none border-0 bg-card/50 rounded-2xl px-6 py-4 pr-16 placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-border focus-visible:ring-offset-0 shadow-sm backdrop-blur-sm"
               disabled={isLoading}
             />
+            <Button
+              type="submit"
+              disabled={!userRequest.trim() || isLoading}
+              className="absolute right-3 bottom-3 h-10 w-10 p-0 rounded-xl bg-primary/90 hover:bg-primary shadow-sm transition-all duration-200"
+            >
+              <Play className="h-4 w-4" />
+            </Button>
           </div>
-
-          <Button
-            type="submit"
-            disabled={!userRequest.trim() || isLoading}
-            className="w-full h-12 text-base font-medium rounded-xl bg-primary/90 hover:bg-primary shadow-sm transition-all duration-200"
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Continue
-          </Button>
         </form>
       ) : step === "url" ? (
         <div className="space-y-6">
