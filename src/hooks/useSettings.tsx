@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from './useAuth';
 
 interface SettingsContextType {
   // Appearance
@@ -39,16 +41,17 @@ export const useSettings = () => {
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { setTheme } = useTheme();
+  const { user, profile } = useAuth();
   
-  // Initialize settings from localStorage or defaults
+  // Initialize settings from profile if available, otherwise localStorage or defaults
   const [appearance, setAppearanceState] = useState(() => 
-    localStorage.getItem('ohsara-appearance') || 'system'
+    (profile as any)?.appearance_preference || localStorage.getItem('ohsara-appearance') || 'system'
   );
   const [language, setLanguageState] = useState(() => 
-    localStorage.getItem('ohsara-language') || 'american-english'
+    (profile as any)?.language_preference || localStorage.getItem('ohsara-language') || 'american-english'
   );
   const [responseLanguage, setResponseLanguageState] = useState(() => 
-    localStorage.getItem('ohsara-response-language') || 'automatic'
+    (profile as any)?.response_language_preference || localStorage.getItem('ohsara-response-language') || 'automatic'
   );
   const [autosuggest, setAutosuggestState] = useState(() => 
     localStorage.getItem('ohsara-autosuggest') !== 'false'
@@ -66,10 +69,15 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.getItem('ohsara-push-notifications') !== 'false'
   );
 
-  // Wrapper functions that update both state and localStorage
-  const setAppearance = (theme: string) => {
+  // Wrapper functions that update both state, localStorage, and database
+  const setAppearance = async (theme: string) => {
     setAppearanceState(theme);
     localStorage.setItem('ohsara-appearance', theme);
+    
+    // Save to database if user is logged in
+    if (user) {
+      await supabase.from('profiles').update({ appearance_preference: theme }).eq('user_id', user.id);
+    }
     
     // Map our appearance setting to next-themes
     const themeMap: { [key: string]: string } = {
@@ -80,14 +88,24 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTheme(themeMap[theme] || 'system');
   };
 
-  const setLanguage = (lang: string) => {
+  const setLanguage = async (lang: string) => {
     setLanguageState(lang);
     localStorage.setItem('ohsara-language', lang);
+    
+    // Save to database if user is logged in
+    if (user) {
+      await supabase.from('profiles').update({ language_preference: lang }).eq('user_id', user.id);
+    }
   };
 
-  const setResponseLanguage = (lang: string) => {
+  const setResponseLanguage = async (lang: string) => {
     setResponseLanguageState(lang);
     localStorage.setItem('ohsara-response-language', lang);
+    
+    // Save to database if user is logged in
+    if (user) {
+      await supabase.from('profiles').update({ response_language_preference: lang }).eq('user_id', user.id);
+    }
   };
 
   const setAutosuggest = (enabled: boolean) => {
@@ -124,6 +142,22 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     setTheme(themeMap[appearance] || 'system');
   }, [appearance, setTheme]);
+
+  // Sync with profile changes when user logs in or profile updates
+  useEffect(() => {
+    if (profile) {
+      const profileAny = profile as any;
+      if (profileAny.appearance_preference && profileAny.appearance_preference !== appearance) {
+        setAppearanceState(profileAny.appearance_preference);
+      }
+      if (profileAny.language_preference && profileAny.language_preference !== language) {
+        setLanguageState(profileAny.language_preference);
+      }
+      if (profileAny.response_language_preference && profileAny.response_language_preference !== responseLanguage) {
+        setResponseLanguageState(profileAny.response_language_preference);
+      }
+    }
+  }, [profile]);
 
   // Request notification permissions if push notifications are enabled
   useEffect(() => {

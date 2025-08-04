@@ -138,31 +138,40 @@ export type Database = {
       }
       profiles: {
         Row: {
+          appearance_preference: string | null
           avatar_url: string | null
           created_at: string
           credits: number | null
           full_name: string | null
           id: string
+          language_preference: string | null
+          response_language_preference: string | null
           updated_at: string
           user_id: string
           username: string | null
         }
         Insert: {
+          appearance_preference?: string | null
           avatar_url?: string | null
           created_at?: string
           credits?: number | null
           full_name?: string | null
           id?: string
+          language_preference?: string | null
+          response_language_preference?: string | null
           updated_at?: string
           user_id: string
           username?: string | null
         }
         Update: {
+          appearance_preference?: string | null
           avatar_url?: string | null
           created_at?: string
           credits?: number | null
           full_name?: string | null
           id?: string
+          language_preference?: string | null
+          response_language_preference?: string | null
           updated_at?: string
           user_id?: string
           username?: string | null
