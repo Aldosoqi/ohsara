@@ -24,13 +24,15 @@ const History = () => {
   useEffect(() => {
     const fetchSummaries = async () => {
       if (!user?.id) return;
+      
+      setLoading(true);
 
       try {
         const { data, error } = await supabase
           .from('summaries')
           .select('*')
           .eq('user_id', user.id)
-          .neq('summary', '') // Only get completed summaries
+          .not('summary', 'eq', '') // Only get completed summaries
           .order('created_at', { ascending: false });
 
         if (error) {
@@ -46,6 +48,26 @@ const History = () => {
     };
 
     fetchSummaries();
+    
+    // Set up real-time subscription for new summaries
+    const subscription = supabase
+      .channel('summaries')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'summaries',
+          filter: `user_id=eq.${user?.id}`
+        }, 
+        () => {
+          fetchSummaries();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [user?.id]);
 
   const formatDate = (dateString: string) => {

@@ -257,6 +257,24 @@ serve(async (req) => {
             const updatedMetadataChunk = `data: ${JSON.stringify({ videoMetadata: updatedMetadata })}\n\n`;
             controller.enqueue(encoder.encode(updatedMetadataChunk));
             
+            // Create a summary record in the database
+            const { data: summaryRecord, error: insertError } = await supabase
+              .from('summaries')
+              .insert({
+                user_id: user.id,
+                youtube_url: youtubeUrl,
+                video_title: updatedMetadata.title,
+                thumbnail_url: updatedMetadata.thumbnail,
+                video_description: transcriptData.description,
+                summary: '' // Will be updated as we process
+              })
+              .select()
+              .single();
+
+            if (insertError) {
+              throw new Error('Failed to create summary record');
+            }
+
             // Process with GPT-4o (streaming)
             const gptResponse = await processTranscriptWithGPT(transcriptData.transcript, userRequest);
             const reader = gptResponse.body?.getReader();
@@ -266,6 +284,7 @@ serve(async (req) => {
             }
 
             const decoder = new TextDecoder();
+            let completeResponse = '';
             
             while (true) {
               const { done, value } = await reader.read();
@@ -284,6 +303,7 @@ serve(async (req) => {
                     const content = parsed.choices?.[0]?.delta?.content;
                     
                     if (content) {
+                      completeResponse += content;
                       const contentChunk = `data: ${JSON.stringify({ content })}\n\n`;
                       controller.enqueue(encoder.encode(contentChunk));
                     }
@@ -293,6 +313,19 @@ serve(async (req) => {
                 }
               }
             }
+
+            // Update the summary with the complete response
+            await supabase
+              .from('summaries')
+              .update({
+                summary: completeResponse,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', summaryRecord.id);
+
+            // Send completion signal
+            const completionChunk = `data: ${JSON.stringify({ completed: true })}\n\n`;
+            controller.enqueue(encoder.encode(completionChunk));
             
             controller.close();
           } catch (error) {
