@@ -60,19 +60,6 @@ export function YouTubeInput() {
           .maybeSingle();
 
         if (incompleteSummary) {
-          // Check if there's already a completed summary for this URL
-          const existingCompletedSummary = await checkExistingSummary(incompleteSummary.youtube_url);
-          
-          if (existingCompletedSummary) {
-            console.log('Found completed summary for this URL, cleaning up incomplete request');
-            // Delete the incomplete request since we have a completed one
-            await supabase
-              .from('summaries')
-              .delete()
-              .eq('id', incompleteSummary.id);
-            return;
-          }
-
           // Check if the request is recent (within last 10 minutes)
           const requestTime = new Date(incompleteSummary.created_at).getTime();
           const now = new Date().getTime();
@@ -228,20 +215,12 @@ export function YouTubeInput() {
   };
 
   const handleAnalysisSubmit = async (e: React.FormEvent) => {
-    console.log('🔥 handleAnalysisSubmit called!', { selectedOption, url, isLoading });
     e.preventDefault();
-    if (!selectedOption) {
-      console.log('❌ No option selected, returning early');
-      return;
-    }
+    if (!selectedOption) return;
 
-    console.log('🔍 Starting to check existing summary...');
     // Check if this URL already has a completed summary
     const existingSummary = await checkExistingSummary(url);
-    console.log('🔍 Existing summary check result:', existingSummary);
-    
     if (existingSummary) {
-      console.log('✅ Found existing summary, showing it instead of creating new one');
       // Show existing summary instead of creating a new one
       setFinalResult(existingSummary.summary);
       setVideoMetadata({
@@ -252,23 +231,18 @@ export function YouTubeInput() {
       return;
     }
 
-    console.log('🧹 Clearing previous results...');
     // Clear previous results before starting new request
     setStreamingContent("");
     setFinalResult("");
     setVideoMetadata(null);
     setError("");
 
-    console.log('🚀 Setting loading state and step to processing...');
     setIsLoading(true);
     setStep("processing");
     
     try {
-      console.log('🔑 Getting session...');
       const { data: { session } } = await supabase.auth.getSession();
-      console.log('🔑 Session result:', session ? 'Found' : 'Not found');
       
-      console.log('📝 Creating new summary record...');
       // Create a new summary record in the database first
       const { data: newSummary, error: summaryError } = await supabase
         .from('summaries')
@@ -284,10 +258,8 @@ export function YouTubeInput() {
         throw new Error('Failed to create summary record');
       }
 
-      console.log('🎬 Summary record created:', newSummary.id);
       setCurrentSummaryId(newSummary.id);
       
-      console.log('🌐 Making API call to process-youtube function...');
       const streamResponse = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/process-youtube`, {
         method: 'POST',
         headers: {
@@ -301,8 +273,6 @@ export function YouTubeInput() {
           customRequest: customRequest
         })
       });
-
-      console.log('🌐 API response received:', streamResponse.status, streamResponse.statusText);
 
       if (!streamResponse.ok) {
         const errorData = await streamResponse.json().catch(() => ({ error: 'Edge Function returned a non-2xx status code' }));
@@ -517,7 +487,6 @@ export function YouTubeInput() {
               type="submit"
               disabled={!selectedOption || isLoading || (selectedOption === "custom" && !customRequest.trim())}
               className="w-full h-12 text-lg font-medium"
-              onClick={() => console.log('🔲 Button clicked!', { selectedOption, disabled: !selectedOption || isLoading })}
             >
               {isLoading ? (
                 <>

@@ -96,12 +96,12 @@ serve(async (req) => {
     console.log('Starting AI analysis...');
     console.log('Transcript length:', transcript.length, 'characters');
     
-    // Increase threshold to use OpenAI more and avoid Gemini quota issues
-    const maxDirectProcessingSize = 150000; // Higher threshold - use OpenAI for more videos
+    // GPT-4.1 has much larger context window (1M+ tokens), so we can handle much larger transcripts
+    const maxDirectProcessingSize = 800000; // Characters - GPT-4.1 can handle ~1M tokens (roughly 800k chars)
     let analysisResult = '';
     
     if (transcript.length <= maxDirectProcessingSize) {
-      // Process short transcripts with OpenAI - most videos will use Gemini
+      // Process directly with GPT-4.1 - no chunking needed for most videos
       const analysisPrompt = buildAnalysisPrompt(analysisType, customRequest, transcript);
       
       const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -328,8 +328,15 @@ async function processChunkWithRetry(chunkPrompt: string, chunkNumber: number, m
 function createStreamingResponse(apiResponse: Response, summary: any, videoMetadata: any, supabase: any, isGemini: boolean = false) {
   const stream = new ReadableStream({
     async start(controller) {
+      const reader = apiResponse.body?.getReader();
+      if (!reader) {
+        controller.close();
+        return;
+      }
+
       let fullContent = '';
       let streamClosed = false;
+      const decoder = new TextDecoder();
 
       const closeStream = async () => {
         if (streamClosed) return;
@@ -355,9 +362,7 @@ function createStreamingResponse(apiResponse: Response, summary: any, videoMetad
       try {
         if (isGemini) {
           // For Gemini, we get a single response, not streaming
-          // Clone the response to avoid "body already consumed" error
-          const clonedResponse = apiResponse.clone();
-          const geminiData = await clonedResponse.json();
+          const geminiData = await apiResponse.json();
           const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
           fullContent = content;
           
@@ -375,51 +380,35 @@ function createStreamingResponse(apiResponse: Response, summary: any, videoMetad
           await closeStream();
         } else {
           // Original OpenAI streaming logic
-          const reader = apiResponse.body?.getReader();
-          if (!reader) {
-            controller.close();
-            return;
-          }
-          
-          const decoder = new TextDecoder();
-          
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) {
-                await closeStream();
-                break;
-              }
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              await closeStream();
+              break;
+            }
 
-              const chunk = decoder.decode(value);
-              const lines = chunk.split('\n');
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
 
-              for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                  const data = line.slice(6);
-                  if (data === '[DONE]') {
-                    await closeStream();
-                    return;
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') {
+                  await closeStream();
+                  return;
+                }
+
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content && !streamClosed) {
+                    fullContent += content;
+                    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content, videoMetadata, summaryId: summary?.id })}\n\n`));
                   }
-
-                  try {
-                    const parsed = JSON.parse(data);
-                    const content = parsed.choices?.[0]?.delta?.content;
-                    if (content && !streamClosed) {
-                      fullContent += content;
-                      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content, videoMetadata, summaryId: summary?.id })}\n\n`));
-                    }
-                  } catch (e) {
-                    // Skip invalid JSON
-                  }
+                } catch (e) {
+                  // Skip invalid JSON
                 }
               }
-            }
-          } finally {
-            try {
-              reader.releaseLock();
-            } catch (e) {
-              // Reader might already be released
             }
           }
         }
@@ -428,6 +417,12 @@ function createStreamingResponse(apiResponse: Response, summary: any, videoMetad
         if (!streamClosed) {
           streamClosed = true;
           controller.error(error);
+        }
+      } finally {
+        try {
+          await reader.releaseLock();
+        } catch (e) {
+          // Reader might already be released
         }
       }
     }
