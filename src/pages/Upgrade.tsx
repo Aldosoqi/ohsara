@@ -81,27 +81,14 @@ const Upgrade = () => {
 
   const plans = [
     {
-      name: "Try Ohsara for Free",
-      price: "Free",
-      description: "5 free summaries for all new users",
-      features: [
-        "Basic summarization",
-        "History view"
-      ],
-      buttonText: "Current Plan",
-      isFree: true
-    },
-    {
       name: "Pay For What You Use",
       price: `$${10 * packQuantity}`,
-      description: `per ${100 * packQuantity} video summaries monthly`,
+      description: `per ${100 * packQuantity} Ohsara's monthly`,
       features: [
-        `${100 * packQuantity} video summaries per month`,
-        "Export as TXT/PDF",
-        "Save Summaries to Storage", 
-        "AI Chat Interface for Follow-up Questions",
-        "Auto-renewal (cancel anytime)",
-        "Credits carry over if unused"
+        `${100 * packQuantity} Ohsara's videos per month`,
+        "Save each Ohsara to storage",
+        "Smart responses",
+        "Credit carry over"
       ],
       buttonText: "Subscribe Now",
       isFree: false
@@ -118,73 +105,63 @@ const Upgrade = () => {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className="flex justify-center max-w-lg mx-auto">
           {plans.map((plan, index) => (
             <Card 
               key={plan.name} 
-              className={`relative ${!plan.isFree ? 'border-primary border-2' : 'border-border'}`}
+              className="relative border-yellow-500 border-2 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/20 dark:to-amber-950/20 shadow-lg shadow-yellow-500/20"
             >
               <CardHeader className="text-center pb-6">
                 <CardTitle className="text-2xl font-semibold">{plan.name}</CardTitle>
                 <div className="mt-4">
                   <span className="text-4xl font-bold text-foreground">{plan.price}</span>
-                  {!plan.isFree && <span className="text-muted-foreground"> {plan.description}</span>}
+                <span className="text-muted-foreground"> {plan.description}</span>
                 </div>
-                {plan.isFree && <CardDescription className="mt-2">{plan.description}</CardDescription>}
               </CardHeader>
               
               <CardContent className="space-y-6">
-                {!plan.isFree && (
-                  <div className="flex items-center justify-center gap-4 p-4 bg-muted rounded-lg">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPackQuantity(Math.max(1, packQuantity - 1))}
-                      disabled={packQuantity <= 1}
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <span className="text-lg font-medium">
-                      {packQuantity} × 100 videos
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPackQuantity(packQuantity + 1)}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
+                <div className="flex items-center justify-center gap-4 p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-yellow-300 dark:border-yellow-700">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPackQuantity(Math.max(1, packQuantity - 1))}
+                    disabled={packQuantity <= 1}
+                    className="border-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-950/30"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="text-lg font-medium text-amber-800 dark:text-amber-200">
+                    {packQuantity} × 100 videos
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPackQuantity(packQuantity + 1)}
+                    className="border-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-950/30"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
                 
                 <ul className="space-y-3">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-center gap-3">
-                      <Check className="h-5 w-5 text-primary flex-shrink-0" />
+                      <Check className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
                       <span className="text-foreground">{feature}</span>
                     </li>
                   ))}
                 </ul>
                 
-                {plan.isFree ? (
-                  <Button 
-                    className="w-full h-12 bg-secondary hover:bg-secondary/80 text-secondary-foreground"
-                    disabled
-                  >
-                    {plan.buttonText}
-                  </Button>
-                ) : (
-                  <div className="space-y-4">
-                    {!user && (
-                      <p className="text-sm text-muted-foreground text-center">
-                        Please sign in to subscribe
-                      </p>
-                    )}
-                    <div ref={paypalContainerRef} className="min-h-[50px]">
-                      {/* PayPal button will be rendered here */}
-                    </div>
+                <div className="space-y-4">
+                  {!user && (
+                    <p className="text-sm text-muted-foreground text-center">
+                      Please sign in to subscribe
+                    </p>
+                  )}
+                  <div ref={paypalContainerRef} className="min-h-[50px]">
+                    {/* PayPal button will be rendered here */}
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
           ))}
