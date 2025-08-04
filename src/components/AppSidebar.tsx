@@ -35,7 +35,6 @@ export function AppSidebar() {
             {!isCollapsed && "ohsara"}
           </div>
         </div>
-
         <SidebarGroup className="px-3 py-4">
           <SidebarGroupContent>
             <SidebarMenu className="space-y-2">
@@ -45,13 +44,32 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end
-                      className={({ isActive }) =>
-                        `nav-item ${isActive ? "nav-item-active" : ""}`
-                      }
+                      className={({ isActive }) => {
+                        if (item.title === "Upgrade") {
+                          return `nav-item relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 rounded-lg ${
+                            isActive ? "nav-item-active" : ""
+                          }`;
+                        }
+                        return `nav-item ${isActive ? "nav-item-active" : ""}`;
+                      }}
                     >
-                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      {item.title === "Upgrade" && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 opacity-100 animate-pulse"></div>
+                      )}
+                      <item.icon 
+                        className={`h-5 w-5 flex-shrink-0 relative z-10 ${
+                          item.title === "Upgrade" ? "text-yellow-300 drop-shadow-sm" : ""
+                        }`} 
+                      />
                       {!isCollapsed && (
-                        <span className="font-medium">{item.title}</span>
+                        <span className={`font-medium relative z-10 ${
+                          item.title === "Upgrade" ? "font-bold text-white drop-shadow-sm" : ""
+                        }`}>
+                          {item.title}
+                          {item.title === "Upgrade" && (
+                            <span className="ml-1 text-yellow-300 text-xs">✨</span>
+                          )}
+                        </span>
                       )}
                     </NavLink>
                   </SidebarMenuButton>
