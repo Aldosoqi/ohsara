@@ -45,12 +45,11 @@ export function AppSidebar() {
                       to={item.url}
                       end
                       className={({ isActive }) => {
+                        const baseClasses = `nav-item ${isActive ? "nav-item-active" : ""}`;
                         if (item.title === "Upgrade") {
-                          return `relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 rounded-lg px-3 py-2 ${
-                            isActive ? "nav-item-active" : ""
-                          }`;
+                          return `${baseClasses} !bg-gradient-to-r !from-purple-600 !via-pink-600 !to-blue-600 !text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105`;
                         }
-                        return `nav-item ${isActive ? "nav-item-active" : ""}`;
+                        return baseClasses;
                       }}
                     >
 
