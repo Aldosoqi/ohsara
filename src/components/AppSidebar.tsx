@@ -35,6 +35,7 @@ export function AppSidebar() {
             {!isCollapsed && "ohsara"}
           </div>
         </div>
+
         <SidebarGroup className="px-3 py-4">
           <SidebarGroupContent>
             <SidebarMenu className="space-y-2">
@@ -44,29 +45,13 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end
-                      className={({ isActive }) => {
-                        const baseClasses = `nav-item ${isActive ? "nav-item-active" : ""}`;
-                        if (item.title === "Upgrade") {
-                          return `${baseClasses} !bg-gradient-to-r !from-purple-600 !via-pink-600 !to-blue-600 !text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105`;
-                        }
-                        return baseClasses;
-                      }}
+                      className={({ isActive }) =>
+                        `nav-item ${isActive ? "nav-item-active" : ""}`
+                      }
                     >
-
-                      <item.icon 
-                        className={`h-5 w-5 flex-shrink-0 relative z-10 ${
-                          item.title === "Upgrade" ? "text-yellow-300 drop-shadow-sm" : ""
-                        }`} 
-                      />
+                      <item.icon className="h-5 w-5 flex-shrink-0" />
                       {!isCollapsed && (
-                        <span className={`font-medium relative z-10 ${
-                          item.title === "Upgrade" ? "font-bold text-white drop-shadow-sm" : ""
-                        }`}>
-                          {item.title}
-                          {item.title === "Upgrade" && (
-                            <span className="ml-1 text-yellow-300 text-xs">✨</span>
-                          )}
-                        </span>
+                        <span className="font-medium">{item.title}</span>
                       )}
                     </NavLink>
                   </SidebarMenuButton>
