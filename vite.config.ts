@@ -20,40 +20,44 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    // Enhanced minification and obfuscation for production
+    // Use terser only for production with safer settings
     minify: mode === 'production' ? 'terser' : 'esbuild',
     terserOptions: mode === 'production' ? {
       compress: {
-        drop_console: true, // Remove console.log statements
-        drop_debugger: true, // Remove debugger statements
-        pure_funcs: ['console.log', 'console.warn', 'console.error'], // Remove specific console methods
+        drop_console: true,
+        drop_debugger: true,
+        // Don't compress React internals
+        unsafe: false,
+        unsafe_comps: false,
+        unsafe_Function: false,
+        unsafe_math: false,
+        unsafe_symbols: false,
+        unsafe_methods: false,
+        unsafe_proto: false,
+        unsafe_regexp: false,
+        unsafe_undefined: false,
       },
       mangle: {
-        toplevel: true, // Mangle top-level variable names
-        properties: {
-          regex: /^_/, // Mangle properties starting with underscore
-        },
+        // Don't mangle React-related properties
+        reserved: ['React', 'ReactDOM', 'Component', 'createElement', 'ReactCurrentOwner'],
+        properties: false, // Disable property mangling to prevent React issues
       },
       format: {
-        comments: false, // Remove all comments
+        comments: false,
       },
     } : undefined,
     rollupOptions: {
       output: {
-        // Obfuscate chunk names
         entryFileNames: 'assets/[hash].js',
         chunkFileNames: 'assets/[hash].js',
         assetFileNames: 'assets/[hash].[ext]',
-        // Manual chunks to split vendor code
         manualChunks: {
           vendor: ['react', 'react-dom'],
           ui: ['@radix-ui/react-dialog', '@radix-ui/react-slot'],
         },
       },
     },
-    // Disable source maps in production
     sourcemap: false,
-    // Additional obfuscation
     cssCodeSplit: true,
   },
   define: {
