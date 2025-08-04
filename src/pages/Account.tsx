@@ -390,6 +390,7 @@ const Account = () => {
                         <SelectItem value="english">English</SelectItem>
                         <SelectItem value="spanish">Spanish</SelectItem>
                         <SelectItem value="french">French</SelectItem>
+                        <SelectItem value="arabic">Arabic</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
