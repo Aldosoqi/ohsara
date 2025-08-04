@@ -49,12 +49,12 @@ export function YouTubeInput() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user?.id) return;
 
-        // Get the most recent incomplete summary (empty or null summary)
+        // Get the most recent incomplete summary (empty, null, or still processing)
         const { data: incompleteSummary } = await supabase
           .from('summaries')
           .select('*')
           .eq('user_id', session.user.id)
-          .or('summary.eq.,summary.is.null')
+          .or('summary.eq.,summary.is.null,summary.eq.Processing...')
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -116,6 +116,7 @@ export function YouTubeInput() {
         .eq('youtube_url', youtubeUrl)
         .not('summary', 'eq', '')
         .not('summary', 'is', null)
+        .not('summary', 'eq', 'Processing...')  // Exclude incomplete processing
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
