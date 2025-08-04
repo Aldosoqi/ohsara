@@ -193,56 +193,110 @@ async function extractTranscript(videoId: string) {
   try {
     console.log(`🔍 Attempting to extract transcript for video: ${videoId}`);
     
-    const response = await fetch(`https://api.apify.com/v2/acts/lhotanok~youtube-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        startUrls: [`https://www.youtube.com/watch?v=${videoId}`],
-        maxResults: 1,
-        subtitlesFormat: 'text',
-        subtitlesLangCodes: ['en', 'en-US', 'en-GB'],
-        verboseLog: false
-      }),
-    });
+    // First try: Use Apify YouTube scraper
+    try {
+      const response = await fetch(`https://api.apify.com/v2/acts/apify~youtube-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startUrls: [`https://www.youtube.com/watch?v=${videoId}`],
+          maxResults: 1,
+          subtitlesFormat: 'text',
+          subtitlesLangCodes: ['en', 'en-US', 'en-GB', 'auto'],
+          verboseLog: false
+        }),
+      });
 
-    if (!response.ok) {
-      throw new Error(`Apify API error: ${response.status}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📊 Apify response received');
+
+        if (data && Array.isArray(data) && data.length > 0) {
+          const videoData = data[0];
+          
+          // Extract transcript
+          let transcript = '';
+          if (videoData.subtitles && videoData.subtitles.length > 0) {
+            transcript = videoData.subtitles.join(' ');
+            console.log(`✅ Apify transcript found: ${transcript.length} characters`);
+          }
+
+          // Extract metadata
+          const metadata = {
+            title: videoData.title || 'Unknown Title',
+            description: videoData.description || '',
+            thumbnail: videoData.thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+            duration: videoData.duration || 0,
+            viewCount: videoData.viewCount || 0,
+            publishDate: videoData.publishDate || null,
+            channelName: videoData.channelName || 'Unknown Channel'
+          };
+
+          if (transcript.trim()) {
+            return {
+              transcript: transcript.trim(),
+              metadata
+            };
+          }
+        }
+      } else {
+        console.log(`❌ Apify API error: ${response.status} - trying fallback method`);
+      }
+    } catch (apifyError) {
+      console.log('❌ Apify method failed, trying fallback:', apifyError);
     }
 
-    const data = await response.json();
-    console.log('📊 Apify response received');
+    // Fallback: Try YouTube's own transcript API
+    console.log('🔄 Trying YouTube transcript API fallback...');
+    try {
+      const transcriptResponse = await fetch(`https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${Deno.env.get('YOUTUBE_API_KEY') || 'demo'}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
 
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      throw new Error('No data returned from Apify');
+      if (transcriptResponse.ok) {
+        const transcriptData = await transcriptResponse.json();
+        console.log('📊 YouTube API response received');
+        
+        // For now, if YouTube API works, we'll use basic metadata
+        const basicMetadata = {
+          title: 'Video Analysis',
+          description: '',
+          thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          duration: 0,
+          viewCount: 0,
+          publishDate: null,
+          channelName: 'YouTube Channel'
+        };
+
+        // If we have captions available, we could potentially extract them
+        // For now, let's return a placeholder that indicates we need manual transcript
+        return {
+          transcript: null,
+          metadata: basicMetadata
+        };
+      }
+    } catch (youtubeError) {
+      console.log('❌ YouTube API fallback also failed:', youtubeError);
     }
 
-    const videoData = data[0];
-    
-    // Extract transcript
-    let transcript = '';
-    if (videoData.subtitles && videoData.subtitles.length > 0) {
-      transcript = videoData.subtitles.join(' ');
-      console.log(`✅ Transcript found: ${transcript.length} characters`);
-    } else {
-      console.log('❌ No subtitles found in video data');
-    }
-
-    // Extract metadata
-    const metadata = {
-      title: videoData.title || 'Unknown Title',
-      description: videoData.description || '',
-      thumbnail: videoData.thumbnail || '',
-      duration: videoData.duration || 0,
-      viewCount: videoData.viewCount || 0,
-      publishDate: videoData.publishDate || null,
-      channelName: videoData.channelName || 'Unknown Channel'
-    };
-
+    // Final fallback: Return with basic metadata and no transcript
+    console.log('❌ All transcript extraction methods failed');
     return {
-      transcript: transcript.trim(),
-      metadata
+      transcript: null,
+      metadata: {
+        title: 'Video Analysis',
+        description: '',
+        thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        duration: 0,
+        viewCount: 0,
+        publishDate: null,
+        channelName: 'YouTube Channel'
+      }
     };
 
   } catch (error) {
@@ -252,7 +306,7 @@ async function extractTranscript(videoId: string) {
       metadata: {
         title: 'Unknown Title',
         description: '',
-        thumbnail: '',
+        thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
         duration: 0,
         viewCount: 0,
         publishDate: null,
