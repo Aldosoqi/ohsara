@@ -32,7 +32,7 @@ export function AppSidebar() {
         {/* Logo */}
         <div className="p-6 border-b border-sidebar-border">
           <div className="ohsara-logo text-xl font-semibold">
-            {!isCollapsed && "ohsara"}
+            {!isCollapsed && "Ohsara AI"}
           </div>
         </div>
 
