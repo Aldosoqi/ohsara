@@ -176,9 +176,8 @@ const Auth = () => {
           <h1 className="text-4xl font-bold text-foreground mb-3 tracking-tight">
             Ohsara AI
           </h1>
-          <p className="text-muted-foreground text-lg">
-            Get started for free. No credit card required.
-          </p>
+          <p className="text-muted-foreground text-lg">Get started for free. No credit card required.
+Save your time, Gain much knowledge...</p>
         </div>
 
         <Card className="backdrop-blur-xl border-white/20 shadow-2xl" style={{
