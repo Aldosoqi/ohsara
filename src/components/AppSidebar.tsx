@@ -1,4 +1,4 @@
-import { Home, History, User, Crown, Settings } from "lucide-react";
+import { Home, History, User, Crown, Settings, Podcast, Brain } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -13,6 +13,8 @@ import {
 
 const navigationItems = [
   { title: "Home", url: "/", icon: Home },
+  { title: "Ohsara for podcasts", url: "/podcasts", icon: Podcast },
+  { title: "Intelligent Ohsara", url: "/intelligent", icon: Brain },
   { title: "History", url: "/history", icon: History },
   { title: "Account", url: "/account", icon: User },
   { title: "Upgrade", url: "/upgrade", icon: Crown },
