@@ -265,14 +265,7 @@ Save your time, Gain much knowledge...</p>
                     </Button>
                   </form>
                   
-                  <div className="mt-6 text-center text-xs text-muted-foreground">
-                    <p>
-                      By signing up for Ohsara you acknowledge that you agree to Ohsara's{" "}
-                      <a href="#" className="underline hover:text-foreground">Terms of Service</a>{" "}
-                      and{" "}
-                      <a href="#" className="underline hover:text-foreground">Privacy Policy</a>.
-                    </p>
-                  </div>
+                  
                 </TabsContent>
               </Tabs>
             </div>
