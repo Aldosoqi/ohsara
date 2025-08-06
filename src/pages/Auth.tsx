@@ -161,9 +161,7 @@ const Auth = () => {
       setLoading(false);
     }
   };
-  return <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{
-    background: 'var(--gradient-auth)'
-  }}>
+  return <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl"></div>
@@ -180,10 +178,7 @@ const Auth = () => {
 Save your time, Gain much knowledge...</p>
         </div>
 
-        <Card className="backdrop-blur-xl border-white/20 shadow-2xl" style={{
-        background: 'var(--glass-bg)',
-        borderColor: 'var(--glass-border)'
-      }}>
+        <Card className="backdrop-blur-xl bg-white/25 border-white/30 shadow-2xl">
           <CardHeader className="space-y-1 text-center pb-4">
             <CardTitle className="text-2xl font-semibold">Sign up</CardTitle>
           </CardHeader>
@@ -231,9 +226,7 @@ Save your time, Gain much knowledge...</p>
                         </Button>
                       </div>
                     </div>
-                    <Button type="submit" className="w-full h-12 text-base font-medium mt-6" style={{
-                    background: 'var(--gradient-auth-button)'
-                  }} disabled={loading}>
+                    <Button type="submit" className="w-full h-12 text-base font-medium mt-6 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white" disabled={loading}>
                       {loading ? "Signing in..." : "Sign In"}
                     </Button>
                   </form>
@@ -258,9 +251,7 @@ Save your time, Gain much knowledge...</p>
                         </Button>
                       </div>
                     </div>
-                    <Button type="submit" className="w-full h-12 text-base font-medium mt-6" style={{
-                    background: 'var(--gradient-auth-button)'
-                  }} disabled={loading}>
+                    <Button type="submit" className="w-full h-12 text-base font-medium mt-6 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white" disabled={loading}>
                       {loading ? "Creating account..." : "Create Account"}
                     </Button>
                   </form>
