@@ -161,33 +161,33 @@ const Auth = () => {
       setLoading(false);
     }
   };
-  return <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+  return <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-background">
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/20 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-primary/15 to-transparent rounded-full blur-3xl"></div>
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-primary/10 to-transparent rounded-full blur-3xl"></div>
       </div>
       
       <div className="relative z-10 w-full max-w-md p-4">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">
+          <h1 className="text-4xl font-bold text-foreground mb-3 tracking-tight">
             Ohsara AI
           </h1>
-          <p className="text-gray-300 text-lg">Get started for free. No credit card required.
+          <p className="text-muted-foreground text-lg">Get started for free. No credit card required.
 Save your time, Gain much knowledge...</p>
         </div>
 
-        <Card className="backdrop-blur-xl bg-white/95 border-white/50 shadow-2xl">
+        <Card className="backdrop-blur-xl bg-card/95 border shadow-2xl">
           <CardHeader className="space-y-1 text-center pb-4">
-            <CardTitle className="text-2xl font-semibold text-gray-900">Sign up</CardTitle>
+            <CardTitle className="text-2xl font-semibold text-card-foreground">Sign up</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <Button onClick={handleGoogleSignIn} variant="outline" className="w-full h-12 text-base font-medium bg-white border-gray-300 hover:bg-gray-50 transition-all duration-200 text-gray-700 disabled:opacity-75 disabled:cursor-not-allowed" disabled={loading}>
+              <Button onClick={handleGoogleSignIn} variant="outline" className="w-full h-12 text-base font-medium disabled:opacity-75 disabled:cursor-not-allowed" disabled={loading}>
                 {loading ? (
                   <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 mr-2"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
                     Signing in...
                   </div>
                 ) : (
@@ -205,40 +205,40 @@ Save your time, Gain much knowledge...</p>
               
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
-                  <Separator className="w-full bg-gray-300" />
+                  <Separator className="w-full" />
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="bg-white px-4 py-1 rounded-full text-gray-600">
+                  <span className="bg-card px-4 py-1 rounded-full text-muted-foreground">
                     or
                   </span>
                 </div>
               </div>
 
               <Tabs defaultValue="signup" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-gray-100 border-0">
-                  <TabsTrigger value="signin" className="data-[state=active]:bg-white data-[state=active]:text-gray-900">Sign In</TabsTrigger>
-                  <TabsTrigger value="signup" className="data-[state=active]:bg-white data-[state=active]:text-gray-900">Sign Up</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="signin">Sign In</TabsTrigger>
+                  <TabsTrigger value="signup">Sign Up</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="signin" className="mt-6">
                   <form onSubmit={handleSignIn} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="signin-email" className="text-sm font-medium text-gray-700">Email</Label>
-                      <Input id="signin-email" type="email" placeholder="Enter your email" value={email} onChange={e => setEmail(e.target.value)} required className="h-12 bg-white border-gray-300 text-gray-900 placeholder:text-gray-500" />
+                      <Label htmlFor="signin-email" className="text-sm font-medium">Email</Label>
+                      <Input id="signin-email" type="email" placeholder="Enter your email" value={email} onChange={e => setEmail(e.target.value)} required className="h-12" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="signin-password" className="text-sm font-medium text-gray-700">Password</Label>
+                      <Label htmlFor="signin-password" className="text-sm font-medium">Password</Label>
                       <div className="relative">
-                        <Input id="signin-password" type={showPassword ? "text" : "password"} placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} required className="h-12 bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 pr-12" />
-                        <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-gray-100 text-gray-600" onClick={() => setShowPassword(!showPassword)}>
+                        <Input id="signin-password" type={showPassword ? "text" : "password"} placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} required className="h-12 pr-12" />
+                        <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3 py-2" onClick={() => setShowPassword(!showPassword)}>
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
                       </div>
                     </div>
-                    <Button type="submit" className="w-full h-12 text-base font-medium mt-6 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white disabled:opacity-75 disabled:cursor-not-allowed" disabled={loading}>
+                    <Button type="submit" className="w-full h-12 text-base font-medium mt-6 disabled:opacity-75 disabled:cursor-not-allowed" disabled={loading}>
                       {loading ? (
                         <div className="flex items-center">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
                           Signing in...
                         </div>
                       ) : "Sign In"}
@@ -249,26 +249,26 @@ Save your time, Gain much knowledge...</p>
                 <TabsContent value="signup" className="mt-6">
                   <form onSubmit={handleSignUp} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="signup-name" className="text-sm font-medium text-gray-700">Full Name</Label>
-                      <Input id="signup-name" type="text" placeholder="Enter your full name" value={fullName} onChange={e => setFullName(e.target.value)} required className="h-12 bg-white border-gray-300 text-gray-900 placeholder:text-gray-500" />
+                      <Label htmlFor="signup-name" className="text-sm font-medium">Full Name</Label>
+                      <Input id="signup-name" type="text" placeholder="Enter your full name" value={fullName} onChange={e => setFullName(e.target.value)} required className="h-12" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="signup-email" className="text-sm font-medium text-gray-700">Email</Label>
-                      <Input id="signup-email" type="email" placeholder="Enter your email" value={email} onChange={e => setEmail(e.target.value)} required className="h-12 bg-white border-gray-300 text-gray-900 placeholder:text-gray-500" />
+                      <Label htmlFor="signup-email" className="text-sm font-medium">Email</Label>
+                      <Input id="signup-email" type="email" placeholder="Enter your email" value={email} onChange={e => setEmail(e.target.value)} required className="h-12" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="signup-password" className="text-sm font-medium text-gray-700">Password</Label>
+                      <Label htmlFor="signup-password" className="text-sm font-medium">Password</Label>
                       <div className="relative">
-                        <Input id="signup-password" type={showPassword ? "text" : "password"} placeholder="Create a password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="h-12 bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 pr-12" />
-                        <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-gray-100 text-gray-600" onClick={() => setShowPassword(!showPassword)}>
+                        <Input id="signup-password" type={showPassword ? "text" : "password"} placeholder="Create a password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="h-12 pr-12" />
+                        <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3 py-2" onClick={() => setShowPassword(!showPassword)}>
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
                       </div>
                     </div>
-                    <Button type="submit" className="w-full h-12 text-base font-medium mt-6 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white disabled:opacity-75 disabled:cursor-not-allowed" disabled={loading}>
+                    <Button type="submit" className="w-full h-12 text-base font-medium mt-6 disabled:opacity-75 disabled:cursor-not-allowed" disabled={loading}>
                       {loading ? (
                         <div className="flex items-center">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
                           Creating account...
                         </div>
                       ) : "Create Account"}
@@ -282,7 +282,7 @@ Save your time, Gain much knowledge...</p>
           </CardContent>
         </Card>
         
-        <div className="mt-6 text-center text-sm text-gray-400">
+        <div className="mt-6 text-center text-sm text-muted-foreground">
           <p>© 2025 Ohsara AI Tech, Inc.</p>
         </div>
       </div>
