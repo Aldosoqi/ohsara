@@ -311,7 +311,7 @@ export function YouTubeInput() {
 
           <div className="bg-background border border-border/50 rounded-lg p-0 shadow-sm overflow-hidden">
             <div className="p-6 space-y-1">
-              <div className="chatgpt-output text-foreground/90 leading-relaxed" dangerouslySetInnerHTML={{
+              <div className="chatgpt-output text-foreground/90 leading-relaxed text-left" dangerouslySetInnerHTML={{
             __html: finalResult
               .replace(/^### (.*$)/gm, '<h3 class="text-base font-semibold text-foreground mt-6 mb-3 border-b border-border/30 pb-2">$1</h3>')
               .replace(/^## (.*$)/gm, '<h2 class="text-lg font-semibold text-foreground mt-8 mb-4 border-b border-border/30 pb-2">$1</h2>')
