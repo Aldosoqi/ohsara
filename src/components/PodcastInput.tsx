@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Send, Upload, FileText, Mic } from "lucide-react";
+import { ArrowLeft, Send, Link, Mic } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-type Step = "upload" | "processing" | "chat";
+type Step = "input" | "processing" | "chat";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -19,8 +19,8 @@ interface ChatMessage {
 export const PodcastInput = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [step, setStep] = useState<Step>("upload");
-  const [transcript, setTranscript] = useState("");
+  const [step, setStep] = useState<Step>("input");
+  const [podcastUrl, setPodcastUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [userMessage, setUserMessage] = useState("");
@@ -37,50 +37,50 @@ export const PodcastInput = () => {
     scrollToBottom();
   }, [chatMessages, isTyping]);
 
-  const handleTranscriptUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        setTranscript(content);
-        setPodcastTitle(file.name.replace(/\.[^/.]+$/, ""));
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  const handleTranscriptSubmit = async () => {
-    if (!transcript.trim()) {
+  const handleUrlSubmit = async () => {
+    if (!podcastUrl.trim()) {
       toast({
         title: "Error",
-        description: "Please provide a transcript",
+        description: "Please provide a podcast URL",
         variant: "destructive",
       });
       return;
     }
 
     setLoading(true);
+    setStep("processing");
+    
     try {
+      const { data, error } = await supabase.functions.invoke('process-podcast-chat', {
+        body: { 
+          podcastUrl,
+          action: 'scrape'
+        },
+      });
+
+      if (error) throw error;
+
       // Store transcript in session for memory
-      transcriptSessionRef.current = transcript;
+      transcriptSessionRef.current = data.transcript;
+      setPodcastTitle(data.title || 'Podcast');
       
       // Add initial system message about the transcript
       const initialMessage: ChatMessage = {
         role: "assistant",
-        content: `I've successfully processed the podcast transcript for "${podcastTitle || 'your podcast'}". The transcript contains ${transcript.split(' ').length} words. I now have the full context in memory and can answer any questions about the content. What would you like to know?`,
+        content: `I've successfully scraped and processed the podcast transcript for "${data.title || 'your podcast'}". The transcript contains ${data.transcript.split(' ').length} words. I now have the full context in memory and can answer any questions about the content. What would you like to know?`,
         timestamp: new Date(),
       };
       
       setChatMessages([initialMessage]);
       setStep("chat");
     } catch (error) {
-      console.error("Error processing transcript:", error);
+      console.error("Error processing podcast:", error);
       toast({
         title: "Error",
-        description: "Failed to process transcript",
+        description: error.message || "Failed to process podcast",
         variant: "destructive",
       });
+      setStep("input");
     } finally {
       setLoading(false);
     }
@@ -139,9 +139,9 @@ export const PodcastInput = () => {
     }
   };
 
-  const goBackToUpload = () => {
-    setStep("upload");
-    setTranscript("");
+  const goBackToInput = () => {
+    setStep("input");
+    setPodcastUrl("");
     setChatMessages([]);
     setPodcastTitle("");
     transcriptSessionRef.current = null;
@@ -195,7 +195,7 @@ export const PodcastInput = () => {
     });
   };
 
-  if (step === "upload") {
+  if (step === "input") {
     return (
       <div className="w-full max-w-2xl mx-auto space-y-6">
         <div className="space-y-4">
@@ -204,9 +204,9 @@ export const PodcastInput = () => {
               <Mic className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">Upload Podcast Transcript</h2>
+              <h2 className="text-xl font-semibold">Podcast URL Analysis</h2>
               <p className="text-muted-foreground">
-                Upload a transcript file or paste the content directly
+                Enter a podcast URL to scrape and analyze the transcript
               </p>
             </div>
           </div>
@@ -216,66 +216,64 @@ export const PodcastInput = () => {
           <CardContent className="p-6 space-y-6">
             <div>
               <label className="block text-sm font-medium mb-2">
-                Upload Transcript File
+                Podcast URL
               </label>
               <div className="flex items-center gap-4">
                 <Input
-                  type="file"
-                  accept=".txt,.md,.srt"
-                  onChange={handleTranscriptUpload}
+                  type="url"
+                  value={podcastUrl}
+                  onChange={(e) => setPodcastUrl(e.target.value)}
+                  placeholder="https://example.com/podcast-episode"
                   className="flex-1"
                 />
-                <Upload className="h-5 w-5 text-muted-foreground" />
+                <Link className="h-5 w-5 text-muted-foreground" />
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Supports .txt, .md, .srt files
+                Supports various podcast platforms and websites
               </p>
             </div>
 
-            <div className="text-center text-muted-foreground">or</div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Paste Transcript Content
-              </label>
-              <Textarea
-                value={transcript}
-                onChange={(e) => setTranscript(e.target.value)}
-                placeholder="Paste your podcast transcript here..."
-                className="min-h-[200px] resize-none"
-              />
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                <strong>Cost:</strong> 2.5 credits per session
+              </p>
             </div>
 
-            {transcript && (
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Podcast Title (Optional)
-                </label>
-                <Input
-                  value={podcastTitle}
-                  onChange={(e) => setPodcastTitle(e.target.value)}
-                  placeholder="Enter podcast title..."
-                />
-              </div>
-            )}
-
             <Button
-              onClick={handleTranscriptSubmit}
-              disabled={!transcript.trim() || loading}
+              onClick={handleUrlSubmit}
+              disabled={!podcastUrl.trim() || loading}
               className="w-full"
             >
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                  Processing...
+                  Scraping Transcript...
                 </>
               ) : (
                 <>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Start Chat Session
+                  <Mic className="h-4 w-4 mr-2" />
+                  Start Analysis (2.5 Credits)
                 </>
               )}
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (step === "processing") {
+    return (
+      <div className="w-full max-w-2xl mx-auto space-y-6">
+        <Card>
+          <CardContent className="p-12 text-center">
+            <div className="flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mx-auto mb-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Processing Podcast</h3>
+            <p className="text-muted-foreground">
+              Scraping and analyzing the transcript... This may take a few moments.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -288,11 +286,11 @@ export const PodcastInput = () => {
         <div className="flex items-center justify-between">
           <Button
             variant="ghost"
-            onClick={goBackToUpload}
+            onClick={goBackToInput}
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            New Transcript
+            New Podcast
           </Button>
           <div className="text-center">
             <h2 className="text-lg font-semibold">
