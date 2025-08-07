@@ -309,10 +309,20 @@ export function YouTubeInput() {
               <h3 className="font-semibold text-lg">{videoMetadata.title}</h3>
             </div>}
 
-          <div className="bg-gradient-to-br from-card via-card to-accent/10 border border-border rounded-xl p-8 shadow-lg">
-            <div className="prose prose-lg max-w-none text-foreground">
-              <div className="formatted-content space-y-4" dangerouslySetInnerHTML={{
-            __html: finalResult.replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-foreground mt-6 mb-3">$1</h3>').replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-foreground mt-8 mb-4">$1</h2>').replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-foreground mt-10 mb-5">$1</h1>').replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-foreground">$1</strong>').replace(/\*(.*?)\*/g, '<em class="italic">$1</em>').replace(/^[-•] (.*$)/gm, '<li class="ml-4 mb-1">$1</li>').replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4 mb-1 list-decimal">$2</li>').replace(/\n\n/g, '</p><p class="mb-4">').replace(/^(?!<[h|l|s|e])/gm, '<p class="mb-4">').replace(/<\/p><p class="mb-4">(?=<[h|l])/g, '</p>')
+          <div className="bg-background border border-border/50 rounded-lg p-0 shadow-sm overflow-hidden">
+            <div className="p-6 space-y-1">
+              <div className="chatgpt-output text-foreground/90 leading-relaxed" dangerouslySetInnerHTML={{
+            __html: finalResult
+              .replace(/^### (.*$)/gm, '<h3 class="text-base font-semibold text-foreground mt-6 mb-3 border-b border-border/30 pb-2">$1</h3>')
+              .replace(/^## (.*$)/gm, '<h2 class="text-lg font-semibold text-foreground mt-8 mb-4 border-b border-border/30 pb-2">$1</h2>')
+              .replace(/^# (.*$)/gm, '<h1 class="text-xl font-bold text-foreground mt-8 mb-5 border-b border-border/30 pb-3">$1</h1>')
+              .replace(/\*\*(.*?)\*\*/g, '<strong class="font-medium text-foreground">$1</strong>')
+              .replace(/\*(.*?)\*/g, '<em class="italic text-foreground/80">$1</em>')
+              .replace(/^[-•] (.*$)/gm, '<div class="flex items-start gap-3 my-2"><span class="text-foreground/60 text-sm mt-1">•</span><span class="flex-1 text-sm leading-relaxed">$1</span></div>')
+              .replace(/^(\d+)\. (.*$)/gm, '<div class="flex items-start gap-3 my-2"><span class="text-foreground/60 text-sm mt-1 font-medium">$1.</span><span class="flex-1 text-sm leading-relaxed">$2</span></div>')
+              .replace(/\n\n/g, '</p><p class="mb-4 text-sm leading-relaxed text-foreground/90">')
+              .replace(/^(?!<[hdl])/gm, '<p class="mb-4 text-sm leading-relaxed text-foreground/90">')
+              .replace(/<\/p><p class="mb-4 text-sm leading-relaxed text-foreground\/90">(?=<[hdl])/g, '</p>')
           }} />
             </div>
           </div>
