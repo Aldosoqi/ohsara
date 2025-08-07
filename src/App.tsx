@@ -11,7 +11,6 @@ import Account from "./pages/Account";
 import Auth from "./pages/Auth";
 import Upgrade from "./pages/Upgrade";
 import Settings from "./pages/Settings";
-import Podcasts from "./pages/Podcasts";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,7 +34,6 @@ const App = () => (
                 <Route path="/account" element={<Account />} />
                 <Route path="/upgrade" element={<Upgrade />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="/podcasts" element={<Podcasts />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
