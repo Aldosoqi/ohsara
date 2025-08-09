@@ -126,7 +126,7 @@ All colors MUST be HSL for consistent theming.
 @layer components {
   /* Ohsara-specific component styles */
   .ohsara-logo {
-    @apply font-medium text-foreground tracking-tight;
+    @apply font-changa text-foreground tracking-tight;
   }
   
   .suggestion-pill {
