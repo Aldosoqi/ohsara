@@ -21,10 +21,10 @@ serve(async (req) => {
       });
     }
 
-    const { transcript, messages } = await req.json();
+    const { relevantContent, fullTranscript, messages } = await req.json();
 
-    if (!transcript || typeof transcript !== "string") {
-      return new Response(JSON.stringify({ error: "Missing 'transcript'" }), {
+    if (!relevantContent || typeof relevantContent !== "string") {
+      return new Response(JSON.stringify({ error: "Missing 'relevantContent'" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -34,9 +34,10 @@ serve(async (req) => {
       {
         role: "system",
         content:
-          "You are Ohsara. Answer strictly based on the provided YouTube transcript. Include timestamps when helpful. If the answer is not in the transcript, say so and suggest where the user might look in the video.",
+          "You are Ohsara. Answer based on the provided relevant video content that was extracted to match viewer expectations. If they ask for more details or something not covered in the relevant content, you can reference the full transcript. Be helpful and conversational.",
       },
-      { role: "system", content: `TRANSCRIPT:\n${transcript.slice(0, 150000)}` },
+      { role: "system", content: `RELEVANT CONTENT (extracted based on viewer expectations):\n${relevantContent.slice(0, 10000)}` },
+      ...(fullTranscript ? [{ role: "system", content: `FULL TRANSCRIPT (for additional context if needed):\n${fullTranscript.slice(0, 20000)}` }] : []),
       ...((Array.isArray(messages) ? messages : []).map((m: any) => ({ role: m.role, content: m.content }))),
     ];
 

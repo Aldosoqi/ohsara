@@ -17,9 +17,14 @@ const Index = () => {
   } = useSettings();
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
-  const [step, setStep] = useState<"url" | "analyzing" | "chat">("url");
+  const [step, setStep] = useState<"url" | "analyzing" | "ready">("url");
   const [isLoading, setIsLoading] = useState(false);
-  const [transcript, setTranscript] = useState<string>("");
+  const [videoData, setVideoData] = useState<{
+    metadata: { title: string; thumbnail: string; author: string };
+    expectations: string;
+    relevantContent: string;
+    fullTranscript: string;
+  } | null>(null);
   type Msg = { role: "user" | "assistant"; content: string };
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -74,9 +79,10 @@ const Index = () => {
                       body: JSON.stringify({ url })
                     });
                     const data = await resp.json();
-                    if (!resp.ok) throw new Error(data?.error || 'Failed');
-                    setTranscript(data.transcriptText || "");
-                    setStep("chat");
+                    if (!resp.ok) throw new Error(data?.error || 'Failed to process video');
+                    
+                    setVideoData(data);
+                    setStep("ready");
                   } catch (e) {
                     console.error(e);
                     setStep("url");
@@ -93,56 +99,93 @@ const Index = () => {
           </div>
 
           {step === 'analyzing' && (
-            <div className="mt-6 text-sm text-muted-foreground">Processing transcript…</div>
+            <div className="mt-6 text-sm text-muted-foreground animate-pulse">
+              🎬 Getting video info → 🔍 Analyzing expectations → ✂️ Extracting relevant content...
+            </div>
           )}
 
-          {step === 'chat' && (
-            <div className="mt-8 space-y-4">
-              <div className="text-left text-sm text-muted-foreground">Chat with the video</div>
-              <div className="space-y-3 max-h-[48vh] overflow-auto pr-2 border rounded-lg p-3">
-                {messages.map((m, idx) => (
-                  <div key={idx} className={`text-sm leading-relaxed ${m.role === 'user' ? 'text-foreground' : 'text-foreground/90'}`}>
-                    <span className="text-muted-foreground mr-2">{m.role === 'user' ? 'You' : 'Ohsara'}:</span>
-                    <span>{m.content}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 flex gap-2">
-                <Textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask anything the thumbnail/title made you expect…"
-                  className="min-h-[56px]"
+          {step === 'ready' && videoData && (
+            <div className="mt-8 space-y-6">
+              {/* Video Info */}
+              <div className="border rounded-lg overflow-hidden bg-card">
+                <img 
+                  src={videoData.metadata.thumbnail} 
+                  alt="Video thumbnail" 
+                  className="w-full aspect-video object-cover"
                 />
-                <Button
-                  onClick={async () => {
-                    const content = input.trim();
-                    if (!content) return;
-                    const newMsgs = [...messages, { role: 'user' as const, content }];
-                    setMessages(newMsgs);
-                    setInput("");
-                    try {
-                      const { data: { session } } = await supabase.auth.getSession();
-                      const accessToken = session?.access_token;
-                      const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/youtube-chat`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${accessToken}`,
-                          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
-                        },
-                        body: JSON.stringify({ transcript, messages: newMsgs })
-                      });
-                      const data = await resp.json();
-                      const reply = data?.reply || 'No answer';
-                      setMessages((cur) => [...cur, { role: 'assistant', content: reply }]);
-                    } catch (e) {
-                      console.error(e);
-                    }
-                  }}
-                  disabled={!input.trim()}
-                  className="h-[56px] self-end"
-                >Send</Button>
+                <div className="p-4">
+                  <h3 className="font-semibold text-lg">{videoData.metadata.title}</h3>
+                  <p className="text-sm text-muted-foreground">by {videoData.metadata.author}</p>
+                </div>
+              </div>
+
+              {/* Expectations Analysis */}
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <h4 className="font-medium mb-2 text-primary">🎯 What you're expecting from this video:</h4>
+                <p className="text-sm leading-relaxed">{videoData.expectations}</p>
+              </div>
+
+              {/* Relevant Content */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-medium mb-3 text-primary">📝 Key content that delivers on your expectations:</h4>
+                <div className="prose prose-sm max-w-none text-sm leading-relaxed whitespace-pre-line">
+                  {videoData.relevantContent}
+                </div>
+              </div>
+
+              {/* Chat Interface */}
+              <div className="border rounded-lg p-4 bg-muted/20">
+                <h4 className="font-medium mb-3 text-primary">💬 Chat for more details</h4>
+                <div className="space-y-3 max-h-[40vh] overflow-auto pr-2">
+                  {messages.map((m, idx) => (
+                    <div key={idx} className={`text-sm leading-relaxed ${m.role === 'user' ? 'text-foreground font-medium' : 'text-foreground/90'}`}>
+                      <span className="text-xs text-muted-foreground mr-2 uppercase">{m.role === 'user' ? 'You' : 'Ohsara'}:</span>
+                      <span>{m.content}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <Textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Ask for more details, clarification, or deeper insights..."
+                    className="min-h-[50px] text-sm"
+                  />
+                  <Button
+                    onClick={async () => {
+                      const content = input.trim();
+                      if (!content) return;
+                      const newMsgs = [...messages, { role: 'user' as const, content }];
+                      setMessages(newMsgs);
+                      setInput("");
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const accessToken = session?.access_token;
+                        const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/youtube-chat`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${accessToken}`,
+                            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
+                          },
+                          body: JSON.stringify({
+                            relevantContent: videoData.relevantContent,
+                            fullTranscript: videoData.fullTranscript,
+                            messages: newMsgs
+                          })
+                        });
+                        const data = await resp.json();
+                        const reply = data?.reply || 'No response available';
+                        setMessages((cur) => [...cur, { role: 'assistant', content: reply }]);
+                      } catch (e) {
+                        console.error(e);
+                        setMessages((cur) => [...cur, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }]);
+                      }
+                    }}
+                    disabled={!input.trim()}
+                    className="h-[50px] self-end px-6"
+                  >Send</Button>
+                </div>
               </div>
             </div>
           )}
