@@ -21,8 +21,29 @@ export function IntelligentInput() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const assistantStreamingRef = useRef<string>("");
-
   const isValidUrl = useMemo(() => url.includes("youtube.com") || url.includes("youtu.be"), [url]);
+
+  // Auto-start from ?url= query param
+  const autoStartRef = useRef(false);
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const u = params.get('url') || '';
+      if (u && (u.includes('youtube.com') || u.includes('youtu.be'))) {
+        setUrl(u);
+        autoStartRef.current = true;
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (autoStartRef.current && isValidUrl && step === 'url' && !isLoading) {
+      autoStartRef.current = false;
+      startAnalysis();
+    }
+  }, [isValidUrl, step, isLoading]);
+
 
   const startAnalysis = async () => {
     if (!isValidUrl || isLoading) return;

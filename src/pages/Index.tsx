@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { YouTubeInput } from "@/components/YouTubeInput";
+import { Input } from "@/components/ui/input";
 import { SuggestionPills } from "@/components/SuggestionPills";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,6 +14,7 @@ const Index = () => {
     homepageWidgets
   } = useSettings();
   const navigate = useNavigate();
+  const [url, setUrl] = useState("");
   useEffect(() => {
     if (!loading && !user) {
       navigate("/auth");
@@ -34,7 +35,25 @@ const Index = () => {
       <div className="w-full max-w-4xl mx-auto space-y-12">
         {/* Main input section */}
         <div className="text-center space-y-8">
-          <YouTubeInput />
+          <div className="space-y-4">
+            <label className="text-lg font-medium">Paste YouTube URL</label>
+            <div className="relative max-w-2xl mx-auto">
+              <Input
+                type="url"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="h-12 pr-28"
+              />
+              <Button
+                onClick={() => navigate(`/intelligent?url=${encodeURIComponent(url)}`)}
+                disabled={!(url.includes("youtube.com") || url.includes("youtu.be"))}
+                className="absolute right-2 top-2 h-8 px-4"
+              >
+                Go
+              </Button>
+            </div>
+          </div>
           
           {homepageWidgets && <div className="mt-8 space-y-6">
               <div>
