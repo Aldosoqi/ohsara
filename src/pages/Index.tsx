@@ -21,9 +21,8 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [videoData, setVideoData] = useState<{
     metadata: { title: string; thumbnail: string; author: string };
-    expectations: string;
-    relevantContent: string;
-    fullTranscript: string;
+    analysis: string;
+    transcript: string;
   } | null>(null);
   type Msg = { role: "user" | "assistant"; content: string };
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -70,7 +69,8 @@ const Index = () => {
                   try {
                     const { data: { session } } = await supabase.auth.getSession();
                     const accessToken = session?.access_token;
-                    const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/process-TS`, {
+
+                    const transcriptResp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/fetch-youtube-transcript`, {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
@@ -79,10 +79,40 @@ const Index = () => {
                       },
                       body: JSON.stringify({ url })
                     });
-                    const data = await resp.json();
-                    if (!resp.ok) throw new Error(data?.error || 'Failed to process video');
-                    
-                    setVideoData(data);
+                    const transcriptData = await transcriptResp.json();
+                    if (!transcriptResp.ok) throw new Error(transcriptData?.error || 'Failed to fetch transcript');
+                    const transcriptText = transcriptData.transcriptText || '';
+
+                    const metaResp = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
+                    const meta = await metaResp.json();
+
+                    const analyzeResp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/video-chat`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
+                      },
+                      body: JSON.stringify({
+                        mode: 'analyze',
+                        transcript: transcriptText,
+                        url,
+                        title: meta.title,
+                        thumbnail_url: meta.thumbnail_url
+                      })
+                    });
+                    const analysis = await analyzeResp.json();
+                    if (!analyzeResp.ok) throw new Error(analysis?.error || 'Failed to analyze video');
+
+                    setVideoData({
+                      metadata: {
+                        title: meta.title,
+                        thumbnail: meta.thumbnail_url,
+                        author: meta.author_name || ''
+                      },
+                      analysis: analysis.content,
+                      transcript: transcriptText
+                    });
                     setStep("ready");
                   } catch (e) {
                     console.error(e);
@@ -101,7 +131,7 @@ const Index = () => {
 
           {step === 'analyzing' && (
             <div className="mt-6 text-sm text-muted-foreground animate-pulse">
-              🎬 Getting video info → 🔍 Analyzing expectations → ✂️ Extracting relevant content...
+              🎬 Fetching transcript → 🔍 Analyzing video → ✂️ Preparing insights...
             </div>
           )}
 
@@ -120,17 +150,17 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Expectations Analysis */}
+              {/* Video Analysis */}
               <div className="border rounded-lg p-4 bg-muted/30">
-                <h4 className="font-medium mb-2 text-primary">🎯 What you're expecting from this video:</h4>
-                <p className="text-sm leading-relaxed">{videoData.expectations}</p>
+                <h4 className="font-medium mb-2 text-primary">📊 Video analysis</h4>
+                <p className="text-sm leading-relaxed whitespace-pre-line">{videoData.analysis}</p>
               </div>
 
-              {/* Relevant Content */}
+              {/* Transcript */}
               <div className="border rounded-lg p-4">
-                <h4 className="font-medium mb-3 text-primary">📝 Key content that delivers on your expectations:</h4>
+                <h4 className="font-medium mb-3 text-primary">📝 Transcript</h4>
                 <div className="prose prose-sm max-w-none text-sm leading-relaxed whitespace-pre-line">
-                  {videoData.relevantContent}
+                  {videoData.transcript}
                 </div>
               </div>
 
@@ -162,7 +192,7 @@ const Index = () => {
                       try {
                         const { data: { session } } = await supabase.auth.getSession();
                         const accessToken = session?.access_token;
-                        const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/youtube-chat`, {
+                        const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/video-chat`, {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',
@@ -170,13 +200,12 @@ const Index = () => {
                             'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
                           },
                           body: JSON.stringify({
-                            relevantContent: videoData.relevantContent,
-                            fullTranscript: videoData.fullTranscript,
+                            transcript: videoData.transcript,
                             messages: newMsgs
                           })
                         });
                         const data = await resp.json();
-                        const reply = data?.reply || 'No response available';
+                        const reply = data?.content || 'No response available';
                         setMessages((cur) => [...cur, { role: 'assistant', content: reply }]);
                       } catch (e) {
                         console.error(e);
