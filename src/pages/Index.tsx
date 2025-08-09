@@ -49,6 +49,7 @@ const Index = () => {
       <div className="w-full max-w-4xl mx-auto space-y-12">
         {/* Main input section */}
         <div className="text-center space-y-8">
+          <h1 className="ohsara-logo text-6xl font-bold">Ohsara</h1>
           <div className="space-y-4">
             <label className="text-lg font-medium">Paste YouTube URL</label>
             <div className="relative max-w-2xl mx-auto">
