@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
 import { SuggestionPills } from "@/components/SuggestionPills";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,6 +17,13 @@ const Index = () => {
   } = useSettings();
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
+  const [step, setStep] = useState<"url" | "analyzing" | "chat">("url");
+  const [isLoading, setIsLoading] = useState(false);
+  const [transcript, setTranscript] = useState<string>("");
+  type Msg = { role: "user" | "assistant"; content: string };
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState("");
+  const assistantStreamingRef = useRef<string>("");
   useEffect(() => {
     if (!loading && !user) {
       navigate("/auth");
@@ -48,14 +57,95 @@ const Index = () => {
                 aria-label="YouTube URL"
               />
               <Button
-                onClick={() => navigate(`/intelligent?url=${encodeURIComponent(url)}`)}
-                disabled={!(url.includes("youtube.com") || url.includes("youtu.be"))}
+                onClick={async () => {
+                  if (!(url.includes("youtube.com") || url.includes("youtu.be"))) return;
+                  setIsLoading(true);
+                  setStep("analyzing");
+                  try {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const accessToken = session?.access_token;
+                    const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/fetch-youtube-transcript`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
+                      },
+                      body: JSON.stringify({ url })
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok) throw new Error(data?.error || 'Failed');
+                    setTranscript(data.transcriptText || "");
+                    setStep("chat");
+                  } catch (e) {
+                    console.error(e);
+                    setStep("url");
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                disabled={!(url.includes("youtube.com") || url.includes("youtu.be")) || isLoading}
                 className="absolute right-2 top-2 h-8 px-4"
               >
-                Go
+                {isLoading ? 'Working…' : 'Go'}
               </Button>
             </div>
           </div>
+
+          {step === 'analyzing' && (
+            <div className="mt-6 text-sm text-muted-foreground">Processing transcript…</div>
+          )}
+
+          {step === 'chat' && (
+            <div className="mt-8 space-y-4">
+              <div className="text-left text-sm text-muted-foreground">Chat with the video</div>
+              <div className="space-y-3 max-h-[48vh] overflow-auto pr-2 border rounded-lg p-3">
+                {messages.map((m, idx) => (
+                  <div key={idx} className={`text-sm leading-relaxed ${m.role === 'user' ? 'text-foreground' : 'text-foreground/90'}`}>
+                    <span className="text-muted-foreground mr-2">{m.role === 'user' ? 'You' : 'Ohsara'}:</span>
+                    <span>{m.content}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask anything the thumbnail/title made you expect…"
+                  className="min-h-[56px]"
+                />
+                <Button
+                  onClick={async () => {
+                    const content = input.trim();
+                    if (!content) return;
+                    const newMsgs = [...messages, { role: 'user' as const, content }];
+                    setMessages(newMsgs);
+                    setInput("");
+                    try {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      const accessToken = session?.access_token;
+                      const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/youtube-chat`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${accessToken}`,
+                          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
+                        },
+                        body: JSON.stringify({ transcript, messages: newMsgs })
+                      });
+                      const data = await resp.json();
+                      const reply = data?.reply || 'No answer';
+                      setMessages((cur) => [...cur, { role: 'assistant', content: reply }]);
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}
+                  disabled={!input.trim()}
+                  className="h-[56px] self-end"
+                >Send</Button>
+              </div>
+            </div>
+          )}
           
           {homepageWidgets && <div className="mt-8 space-y-6">
               <div>

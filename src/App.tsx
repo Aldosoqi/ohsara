@@ -12,7 +12,7 @@ import Auth from "./pages/Auth";
 import Upgrade from "./pages/Upgrade";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
-import Intelligent from "./pages/Intelligent";
+// import Intelligent from "./pages/Intelligent";
 
 const queryClient = new QueryClient();
 
@@ -35,7 +35,7 @@ const App = () => (
                 <Route path="/account" element={<Account />} />
                 <Route path="/upgrade" element={<Upgrade />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="/intelligent" element={<Intelligent />} />
+                {/* <Route path="/intelligent" element={<Intelligent />} /> */}
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
