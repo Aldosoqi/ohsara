@@ -44,6 +44,8 @@ const Index = () => {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 className="h-12 pr-28"
+                autoFocus
+                aria-label="YouTube URL"
               />
               <Button
                 onClick={() => navigate(`/intelligent?url=${encodeURIComponent(url)}`)}
