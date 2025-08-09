@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
@@ -14,19 +15,63 @@ serve(async (req) => {
   });
   try {
     const { mode, transcript, messages, url, title, thumbnail_url } = await req.json();
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openaiKey) {
-      return new Response(JSON.stringify({
-        error: "Server missing OPENAI_API_KEY"
-      }), {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
+      const openaiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!openaiKey) {
+        return new Response(JSON.stringify({
+          error: "Server missing OPENAI_API_KEY"
+        }), {
+          status: 500,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json"
+          }
+        });
+      }
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+      const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+      const supabaseClient = createClient(supabaseUrl, supabaseAnon);
+      const supabaseService = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: { persistSession: false },
       });
-    }
-    const baseSystem = mode === "analyze" ? `You are Ohsara Intelligent, a smart video insight assistant.
+
+      const authHeader = req.headers.get("Authorization") ?? "";
+      const token = authHeader.replace("Bearer ", "");
+      const {
+        data: { user },
+      } = await supabaseClient.auth.getUser(token);
+
+      if (!user) {
+        return new Response(JSON.stringify({ error: "User not authenticated" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      if (mode === "analyze") {
+        const { error: creditError } = await supabaseService.rpc(
+          "update_user_credits",
+          {
+            user_id_param: user.id,
+            credit_amount: -5,
+            transaction_type_param: "usage",
+            description_param: "Video chat session",
+            reference_id_param: null
+          }
+        );
+        if (creditError) {
+          return new Response(
+            JSON.stringify({ error: "Insufficient credits" }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" }
+            }
+          );
+        }
+      }
+      const baseSystem = mode === "analyze" ? `You are Ohsara Intelligent, a smart video insight assistant.
 - Analyze the visual click-appeal of the thumbnail and the semantics of the title.
 - Using the provided transcript as the source of truth, map 5-10 concrete timestamps (mm:ss) that justify the thumbnail/title claims.
 - Provide a compact, structured summary.

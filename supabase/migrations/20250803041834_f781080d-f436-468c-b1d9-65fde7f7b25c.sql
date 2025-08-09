@@ -9,7 +9,7 @@ CREATE OR REPLACE FUNCTION public.update_user_credits(
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = ''
+SET search_path = public
 AS $$
 DECLARE
   current_credits INTEGER;
