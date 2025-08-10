@@ -70,6 +70,26 @@ serve(async (req) => {
             }
           );
         }
+      } else {
+        const { error: creditError } = await supabaseService.rpc(
+          "update_user_credits",
+          {
+            user_id_param: user.id,
+            credit_amount: -0.5,
+            transaction_type_param: "usage",
+            description_param: "Chat message",
+            reference_id_param: null
+          }
+        );
+        if (creditError) {
+          return new Response(
+            JSON.stringify({ error: "Insufficient credits" }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" }
+            }
+          );
+        }
       }
       const baseSystem = mode === "analyze" ? `You are Ohsara Intelligent, a smart video insight assistant.
 - From the Title: extract keywords and intent.
