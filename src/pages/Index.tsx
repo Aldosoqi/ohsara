@@ -20,11 +20,18 @@ const Index = () => {
   const [step, setStep] = useState<"url" | "analyzing" | "ready">("url");
   const [isLoading, setIsLoading] = useState(false);
   const [videoData, setVideoData] = useState<{
-    metadata: { title: string; thumbnail: string; author: string };
+    metadata: {
+      title: string;
+      thumbnail: string;
+      author: string;
+    };
     analysis: string;
     transcript: string;
   } | null>(null);
-  type Msg = { role: "user" | "assistant"; content: string };
+  type Msg = {
+    role: "user" | "assistant";
+    content: string;
+  };
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const assistantStreamingRef = useRef<string>("");
@@ -50,109 +57,91 @@ const Index = () => {
         <div className="text-center space-y-8">
           <h1 className="ohsara-logo text-6xl font-bold">Ohsara</h1>
           <div className="space-y-4">
-            <label className="text-lg font-medium">Paste YouTube URL</label>
+            <label className="text-lg font-medium">Put YouTube URL</label>
             <div className="relative max-w-2xl mx-auto">
-              <Input
-                type="url"
-                placeholder="https://www.youtube.com/watch?v=..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="h-12 pr-28"
-                autoFocus
-                aria-label="YouTube URL"
-              />
-              <Button
-                onClick={async () => {
-                  if (!(url.includes("youtube.com") || url.includes("youtu.be"))) return;
-                  setIsLoading(true);
-                  setStep("analyzing");
-                  try {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    const accessToken = session?.access_token;
-
-                    const transcriptResp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/fetch-youtube-transcript`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${accessToken}`,
-                        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
-                      },
-                      body: JSON.stringify({ url })
-                    });
-                    const transcriptData = await transcriptResp.json();
-                    if (!transcriptResp.ok) throw new Error(transcriptData?.error || 'Failed to fetch transcript');
-                    const transcriptText = transcriptData.transcriptText || '';
-
-                    let metaTitle = transcriptData.title || '';
-                    let metaThumb = transcriptData.thumbnail_url || '';
-                    let metaAuthor = '';
-
-                    if (!metaTitle) {
-                      const metaResp = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
-                      const meta = await metaResp.json();
-                      metaTitle = meta?.title || metaTitle;
-                      metaThumb = meta?.thumbnail_url || metaThumb;
-                      metaAuthor = meta?.author_name || '';
-                    }
-
-                    const analyzeResp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/video-chat`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${accessToken}`,
-                        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
-                      },
-                      body: JSON.stringify({
-                        mode: 'analyze',
-                        transcript: transcriptText,
-                        url,
-                        title: metaTitle,
-                        thumbnail_url: metaThumb
-                      })
-                    });
-                    const analysis = await analyzeResp.json();
-                    if (!analyzeResp.ok) throw new Error(analysis?.error || 'Failed to analyze video');
-
-                    setVideoData({
-                      metadata: {
-                        title: metaTitle,
-                        thumbnail: metaThumb,
-                        author: metaAuthor
-                      },
-                      analysis: analysis.content,
-                      transcript: transcriptText
-                    });
-                    setStep("ready");
-                  } catch (e) {
-                    console.error(e);
-                    setStep("url");
-                  } finally {
-                    setIsLoading(false);
+              <Input type="url" placeholder="https://www.youtube.com/watch?v=..." value={url} onChange={e => setUrl(e.target.value)} className="h-12 pr-28" autoFocus aria-label="YouTube URL" />
+              <Button onClick={async () => {
+              if (!(url.includes("youtube.com") || url.includes("youtu.be"))) return;
+              setIsLoading(true);
+              setStep("analyzing");
+              try {
+                const {
+                  data: {
+                    session
                   }
-                }}
-                disabled={!(url.includes("youtube.com") || url.includes("youtu.be")) || isLoading}
-                className="absolute right-2 top-2 h-8 px-4"
-              >
+                } = await supabase.auth.getSession();
+                const accessToken = session?.access_token;
+                const transcriptResp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/fetch-youtube-transcript`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                    'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
+                  },
+                  body: JSON.stringify({
+                    url
+                  })
+                });
+                const transcriptData = await transcriptResp.json();
+                if (!transcriptResp.ok) throw new Error(transcriptData?.error || 'Failed to fetch transcript');
+                const transcriptText = transcriptData.transcriptText || '';
+                let metaTitle = transcriptData.title || '';
+                let metaThumb = transcriptData.thumbnail_url || '';
+                let metaAuthor = '';
+                if (!metaTitle) {
+                  const metaResp = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
+                  const meta = await metaResp.json();
+                  metaTitle = meta?.title || metaTitle;
+                  metaThumb = meta?.thumbnail_url || metaThumb;
+                  metaAuthor = meta?.author_name || '';
+                }
+                const analyzeResp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/video-chat`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                    'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
+                  },
+                  body: JSON.stringify({
+                    mode: 'analyze',
+                    transcript: transcriptText,
+                    url,
+                    title: metaTitle,
+                    thumbnail_url: metaThumb
+                  })
+                });
+                const analysis = await analyzeResp.json();
+                if (!analyzeResp.ok) throw new Error(analysis?.error || 'Failed to analyze video');
+                setVideoData({
+                  metadata: {
+                    title: metaTitle,
+                    thumbnail: metaThumb,
+                    author: metaAuthor
+                  },
+                  analysis: analysis.content,
+                  transcript: transcriptText
+                });
+                setStep("ready");
+              } catch (e) {
+                console.error(e);
+                setStep("url");
+              } finally {
+                setIsLoading(false);
+              }
+            }} disabled={!(url.includes("youtube.com") || url.includes("youtu.be")) || isLoading} className="absolute right-2 top-2 h-8 px-4">
                 {isLoading ? 'Working…' : 'Go'}
               </Button>
             </div>
           </div>
 
-          {step === 'analyzing' && (
-            <div className="mt-6 text-sm text-muted-foreground animate-pulse">
+          {step === 'analyzing' && <div className="mt-6 text-sm text-muted-foreground animate-pulse">
               🎬 Fetching transcript → 🔍 Analyzing video → ✂️ Preparing insights...
-            </div>
-          )}
+            </div>}
 
-          {step === 'ready' && videoData && (
-            <div className="mt-8 space-y-6">
+          {step === 'ready' && videoData && <div className="mt-8 space-y-6">
               {/* Video Info */}
               <div className="border rounded-lg overflow-hidden bg-card">
-                <img 
-                  src={videoData.metadata.thumbnail} 
-                  alt="Video thumbnail" 
-                  className="w-full aspect-video object-cover"
-                />
+                <img src={videoData.metadata.thumbnail} alt="Video thumbnail" className="w-full aspect-video object-cover" />
                 <div className="p-4">
                   <h3 className="font-semibold text-lg">{videoData.metadata.title}</h3>
                   <p className="text-sm text-muted-foreground">by {videoData.metadata.author}</p>
@@ -177,57 +166,58 @@ const Index = () => {
               <div className="border rounded-lg p-4 bg-muted/20">
                 <h4 className="font-medium mb-3 text-primary">💬 Chat for more details</h4>
                 <div className="space-y-3 max-h-[40vh] overflow-auto pr-2">
-                  {messages.map((m, idx) => (
-                    <div key={idx} className={`text-sm leading-relaxed ${m.role === 'user' ? 'text-foreground font-medium' : 'text-foreground/90'}`}>
+                  {messages.map((m, idx) => <div key={idx} className={`text-sm leading-relaxed ${m.role === 'user' ? 'text-foreground font-medium' : 'text-foreground/90'}`}>
                       <span className="text-xs text-muted-foreground mr-2 uppercase">{m.role === 'user' ? 'You' : 'Ohsara'}:</span>
                       <span>{m.content}</span>
-                    </div>
-                  ))}
+                    </div>)}
                 </div>
                 <div className="mt-4 flex gap-2">
-                  <Textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Ask for more details, clarification, or deeper insights..."
-                    className="min-h-[50px] text-sm"
-                  />
-                  <Button
-                    onClick={async () => {
-                      const content = input.trim();
-                      if (!content) return;
-                      const newMsgs = [...messages, { role: 'user' as const, content }];
-                      setMessages(newMsgs);
-                      setInput("");
-                      try {
-                        const { data: { session } } = await supabase.auth.getSession();
-                        const accessToken = session?.access_token;
-                        const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/video-chat`, {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${accessToken}`,
-                            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
-                          },
-                          body: JSON.stringify({
-                            transcript: videoData.transcript,
-                            messages: newMsgs
-                          })
-                        });
-                        const data = await resp.json();
-                        const reply = data?.content || 'No response available';
-                        setMessages((cur) => [...cur, { role: 'assistant', content: reply }]);
-                      } catch (e) {
-                        console.error(e);
-                        setMessages((cur) => [...cur, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }]);
-                      }
-                    }}
-                    disabled={!input.trim()}
-                    className="h-[50px] self-end px-6"
-                  >Send</Button>
+                  <Textarea value={input} onChange={e => setInput(e.target.value)} placeholder="Ask for more details, clarification, or deeper insights..." className="min-h-[50px] text-sm" />
+                  <Button onClick={async () => {
+                const content = input.trim();
+                if (!content) return;
+                const newMsgs = [...messages, {
+                  role: 'user' as const,
+                  content
+                }];
+                setMessages(newMsgs);
+                setInput("");
+                try {
+                  const {
+                    data: {
+                      session
+                    }
+                  } = await supabase.auth.getSession();
+                  const accessToken = session?.access_token;
+                  const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/video-chat`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${accessToken}`,
+                      'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
+                    },
+                    body: JSON.stringify({
+                      transcript: videoData.transcript,
+                      messages: newMsgs
+                    })
+                  });
+                  const data = await resp.json();
+                  const reply = data?.content || 'No response available';
+                  setMessages(cur => [...cur, {
+                    role: 'assistant',
+                    content: reply
+                  }]);
+                } catch (e) {
+                  console.error(e);
+                  setMessages(cur => [...cur, {
+                    role: 'assistant',
+                    content: 'Sorry, I encountered an error. Please try again.'
+                  }]);
+                }
+              }} disabled={!input.trim()} className="h-[50px] self-end px-6">Send</Button>
                 </div>
               </div>
-            </div>
-          )}
+            </div>}
           
           {homepageWidgets && <div className="mt-8 space-y-6">
               <div>
