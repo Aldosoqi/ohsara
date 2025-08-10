@@ -1,19 +1,24 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.53.0';
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
 };
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: corsHeaders
     });
   }
+
   try {
     const { url } = await req.json().catch(() => ({
       url: undefined
     }));
+
     if (!url) {
       return new Response(JSON.stringify({
         error: "Missing 'url' in request body"
@@ -25,54 +30,148 @@ serve(async (req) => {
         }
       });
     }
-    const token = Deno.env.get("APIFY_API_TOKEN");
-    if (!token) {
-      return new Response(JSON.stringify({
-        error: "Server missing APIFY_API_TOKEN"
-      }), {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
-      });
+
+    // Get auth user
+    const authHeader = req.headers.get('Authorization');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    let userId = null;
+    if (authHeader) {
+      const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+      userId = user?.id;
     }
-    const endpoint = `https://api.apify.com/v2/acts/pintostudio~youtube-transcript-scraper/run-sync-get-dataset-items?token=${token}`;
+
+    // Check credits if user is authenticated
+    if (userId) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('credits')
+        .eq('user_id', userId)
+        .single();
+
+      if (!profile || profile.credits < 4) {
+        return new Response(JSON.stringify({
+          error: "Insufficient credits. Need 4 credits for analysis."
+        }), {
+          status: 402,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json"
+          }
+        });
+      }
+    }
+
+    const apifyToken = "apify_api_ja0f7NdWfQvdRaWbP3Ts0Arnbn2n6c2zR7DI";
+    const endpoint = `https://api.apify.com/v2/acts/pintostudio~youtube-transcript-scraper/run-sync-get-dataset-items?token=${apifyToken}`;
+    
     const apifyResp = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        // Provide multiple possible fields to maximize compatibility with the actor
-        url,
-        videoUrl: url,
-        videoUrls: [
-          url
-        ]
+        videoUrl: url
       })
     });
+
     if (!apifyResp.ok) {
       const text = await apifyResp.text();
       throw new Error(`Apify error: ${text}`);
     }
-      const data = await apifyResp.json();
-      const item = Array.isArray(data) ? data[0] : data;
-      interface Segment { text: string }
-      let segments: Segment[] = [];
-      let chapters: unknown = null;
-      if (item) {
-        if (Array.isArray(item.transcript)) segments = item.transcript;
-        else if (Array.isArray(item.transcripts)) segments = item.transcripts;
-        else if (Array.isArray(item.items)) segments = item.items;
-        else if (Array.isArray(item.segments)) segments = item.segments;
-        if (Array.isArray(item.chapters)) chapters = item.chapters;
-      }
-      const transcriptText = segments.map((s) => s.text).join(" ").trim();
+
+    const data = await apifyResp.json();
+    const item = Array.isArray(data) ? data[0] : data;
+    
+    if (!item) {
+      throw new Error("No data returned from Apify");
+    }
+
+    // Extract transcript with timestamps
+    const transcript = item.transcript || [];
+    const title = item.title || "";
+    const thumbnail = item.thumbnail || "";
+
+    // Analyze with OpenAI
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openAIApiKey) {
+      throw new Error("Missing OpenAI API key");
+    }
+
+    const analysisPrompt = `Analyze this YouTube video based on its title and thumbnail to understand what the user expects from this content:
+
+Title: "${title}"
+Thumbnail URL: ${thumbnail}
+
+Based on the title and visual elements you can infer from the thumbnail URL, extract the key topics, expectations, and main value propositions that a viewer would expect from this video. Focus on what specific information or insights the user is likely seeking.
+
+Return your analysis as a structured response indicating the main expectations and key topics.`;
+
+    const openAIResp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an expert at analyzing video content and user expectations.' },
+          { role: 'user', content: analysisPrompt }
+        ],
+        max_tokens: 500
+      }),
+    });
+
+    const openAIData = await openAIResp.json();
+    const analysis = openAIData.choices[0].message.content;
+
+    // Extract relevant transcript parts with timestamps
+    const extractPrompt = `Based on this analysis of user expectations: "${analysis}"
+
+Extract the most relevant parts from this transcript that directly address what the user is expecting. Include the timestamp for each relevant segment:
+
+${transcript.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}
+
+Return only the segments that contain the key information the user is seeking, maintaining the timestamp format.`;
+
+    const extractResp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an expert at extracting relevant information from transcripts.' },
+          { role: 'user', content: extractPrompt }
+        ],
+        max_tokens: 1000
+      }),
+    });
+
+    const extractData = await extractResp.json();
+    const extractedContent = extractData.choices[0].message.content;
+
+    // Deduct credits if user is authenticated
+    if (userId) {
+      await supabase.rpc('update_user_credits', {
+        user_id_param: userId,
+        credit_amount: -4,
+        transaction_type_param: 'analysis',
+        description_param: 'YouTube video analysis'
+      });
+    }
+
     return new Response(JSON.stringify({
-      transcriptText,
-      segments,
-      chapters,
+      title,
+      thumbnail,
+      analysis,
+      extractedContent,
+      fullTranscript: transcript,
       raw: data
     }), {
       headers: {
@@ -80,11 +179,12 @@ serve(async (req) => {
         "Content-Type": "application/json"
       }
     });
+
   } catch (error) {
     console.error("fetch-youtube-transcript error:", error);
     return new Response(JSON.stringify({
       error: "Unexpected error",
-      details: (error as Error).message
+      details: error.message
     }), {
       status: 500,
       headers: {
