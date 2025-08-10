@@ -25,7 +25,7 @@ serve(async (req) => {
         }
       });
     }
-    const token = Deno.env.get("APIFY_API_TOKEN");
+    const token = Deno.env.get("APIFY_API_TOKEN") || Deno.env.get("APIFY_API_KEY");
     if (!token) {
       return new Response(JSON.stringify({
         error: "Server missing APIFY_API_TOKEN"
@@ -58,18 +58,37 @@ serve(async (req) => {
     }
       const data = await apifyResp.json();
       const item = Array.isArray(data) ? data[0] : data;
-      interface Segment { text: string }
+      interface Segment { text?: string }
       let segments: Segment[] = [];
       let chapters: unknown = null;
+      let title = "";
+      let thumbnail_url = "";
       if (item) {
         if (Array.isArray(item.transcript)) segments = item.transcript;
         else if (Array.isArray(item.transcripts)) segments = item.transcripts;
         else if (Array.isArray(item.items)) segments = item.items;
         else if (Array.isArray(item.segments)) segments = item.segments;
         if (Array.isArray(item.chapters)) chapters = item.chapters;
+        if (typeof (item as any).title === 'string') title = (item as any).title;
+        if (typeof (item as any).videoTitle === 'string') title ||= (item as any).videoTitle;
+        if (typeof (item as any).thumbnail === 'string') thumbnail_url = (item as any).thumbnail;
+        const thumbs: any[] = (item as any).thumbnails || (item as any).videoThumbnails || [];
+        if (Array.isArray(thumbs) && thumbs.length && thumbs[0]?.url) thumbnail_url ||= thumbs[0].url;
       }
-      const transcriptText = segments.map((s) => s.text).join(" ").trim();
+      const transcriptText = segments.map((s) => (s?.text ?? "")).join(" ").trim();
+      if (!title || !thumbnail_url) {
+        try {
+          const oembedResp = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
+          if (oembedResp.ok) {
+            const o = await oembedResp.json();
+            if (typeof o?.title === 'string') title ||= o.title;
+            if (typeof o?.thumbnail_url === 'string') thumbnail_url ||= o.thumbnail_url;
+          }
+        } catch (_) { /* noop */ }
+      }
     return new Response(JSON.stringify({
+      title,
+      thumbnail_url,
       transcriptText,
       segments,
       chapters,

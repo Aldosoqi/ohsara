@@ -83,8 +83,17 @@ const Index = () => {
                     if (!transcriptResp.ok) throw new Error(transcriptData?.error || 'Failed to fetch transcript');
                     const transcriptText = transcriptData.transcriptText || '';
 
-                    const metaResp = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
-                    const meta = await metaResp.json();
+                    let metaTitle = transcriptData.title || '';
+                    let metaThumb = transcriptData.thumbnail_url || '';
+                    let metaAuthor = '';
+
+                    if (!metaTitle) {
+                      const metaResp = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
+                      const meta = await metaResp.json();
+                      metaTitle = meta?.title || metaTitle;
+                      metaThumb = meta?.thumbnail_url || metaThumb;
+                      metaAuthor = meta?.author_name || '';
+                    }
 
                     const analyzeResp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/video-chat`, {
                       method: 'POST',
@@ -97,8 +106,8 @@ const Index = () => {
                         mode: 'analyze',
                         transcript: transcriptText,
                         url,
-                        title: meta.title,
-                        thumbnail_url: meta.thumbnail_url
+                        title: metaTitle,
+                        thumbnail_url: metaThumb
                       })
                     });
                     const analysis = await analyzeResp.json();
@@ -106,9 +115,9 @@ const Index = () => {
 
                     setVideoData({
                       metadata: {
-                        title: meta.title,
-                        thumbnail: meta.thumbnail_url,
-                        author: meta.author_name || ''
+                        title: metaTitle,
+                        thumbnail: metaThumb,
+                        author: metaAuthor
                       },
                       analysis: analysis.content,
                       transcript: transcriptText
