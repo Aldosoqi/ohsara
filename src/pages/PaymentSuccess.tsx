@@ -73,10 +73,10 @@ const PaymentSuccess = () => {
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-            <Check className="h-8 w-8 text-primary" />
+          <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+            <Check className="h-8 w-8 text-green-600" />
           </div>
-          <CardTitle className="text-2xl font-semibold text-primary">
+          <CardTitle className="text-2xl font-semibold text-green-600">
             Payment Successful!
           </CardTitle>
         </CardHeader>

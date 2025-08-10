@@ -55,29 +55,9 @@ serve(async (req) => {
           "update_user_credits",
           {
             user_id_param: user.id,
-            credit_amount: -4,
+            credit_amount: -5,
             transaction_type_param: "usage",
-            description_param: "Thumbnail+Title expectation analysis",
-            reference_id_param: null
-          }
-        );
-        if (creditError) {
-          return new Response(
-            JSON.stringify({ error: "Insufficient credits" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" }
-            }
-          );
-        }
-      } else {
-        const { error: creditError } = await supabaseService.rpc(
-          "update_user_credits",
-          {
-            user_id_param: user.id,
-            credit_amount: -0.5,
-            transaction_type_param: "usage",
-            description_param: "Chat message",
+            description_param: "Video chat session",
             reference_id_param: null
           }
         );
@@ -92,16 +72,11 @@ serve(async (req) => {
         }
       }
       const baseSystem = mode === "analyze" ? `You are Ohsara Intelligent, a smart video insight assistant.
-- From the Title: extract keywords and intent.
-- From the Thumbnail: extract prominent visual properties (objects, text, style) and implied promise.
-- Infer what a viewer expects to learn or get from this video based on title+thumbnail only.
-- Using the provided transcript as the single source of truth, find the most relevant 5–10 moments that satisfy those expectations and cite them as [mm:ss] with a 1–2 sentence answer each.
-- Provide a concise structure:
-  1) Expected value (from title+thumbnail)
-  2) Key keywords & visual properties
-  3) Answers with timestamps (bullet list)
-  4) Gaps (if the transcript doesn’t cover something)
-- Never fabricate content not present in the transcript.` : `You are Ohsara Intelligent. Answer strictly from the provided transcript. If unsure, say so and cite timestamps like [mm:ss].`;
+- Analyze the visual click-appeal of the thumbnail and the semantics of the title.
+- Using the provided transcript as the source of truth, map 5-10 concrete timestamps (mm:ss) that justify the thumbnail/title claims.
+- Provide a compact, structured summary.
+- If information is not present in the transcript, say so and avoid speculation.
+Finish with: "You can ask me anything about this video."` : `You are Ohsara Intelligent. Answer strictly from the provided transcript. If unsure, say so and suggest where to look in the video. Cite timestamps like [mm:ss].`;
     const systemMessage = {
       role: "system",
       content: baseSystem

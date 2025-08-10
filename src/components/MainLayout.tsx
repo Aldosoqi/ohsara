@@ -13,7 +13,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         
         <div className="flex-1 flex flex-col">
@@ -38,7 +38,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           </header>
 
           {/* Main content */}
-          <main className="flex-1">
+          <main className="flex-1 bg-background">
             {children}
           </main>
         </div>

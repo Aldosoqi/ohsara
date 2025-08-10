@@ -42,10 +42,7 @@ const Upgrade = () => {
         layout: 'vertical',
         label: 'subscribe'
       },
-      createSubscription: function(
-        _data: unknown,
-        actions: { subscription: { create: (params: { plan_id: string; quantity: number }) => Promise<string> } }
-      ) {
+      createSubscription: function(data: any, actions: any) {
         if (!user) {
           toast.error('Please sign in to subscribe');
           return;
@@ -56,7 +53,7 @@ const Upgrade = () => {
           quantity: packQuantity
         });
       },
-      onApprove: async function(data: { subscriptionID: string }) {
+      onApprove: async function(data: any, actions: any) {
         try {
           const { error } = await supabase.functions.invoke('handle-paypal-subscription', {
             body: { 
@@ -75,7 +72,7 @@ const Upgrade = () => {
           toast.error('Failed to activate subscription. Please contact support.');
         }
       },
-      onError: function(err: unknown) {
+      onError: function(err: any) {
         console.error('PayPal error:', err);
         toast.error('PayPal subscription failed. Please try again.');
       }
@@ -110,9 +107,9 @@ const Upgrade = () => {
 
         <div className="flex justify-center max-w-lg mx-auto">
           {plans.map((plan, index) => (
-            <Card
-              key={plan.name}
-              className="relative border-primary border-2 bg-gradient-to-br from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/20 shadow-lg shadow-primary/20"
+            <Card 
+              key={plan.name} 
+              className="relative border-yellow-500 border-2 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/20 dark:to-amber-950/20 shadow-lg shadow-yellow-500/20"
             >
               <CardHeader className="text-center pb-6">
                 <CardTitle className="text-2xl font-semibold">{plan.name}</CardTitle>
@@ -123,24 +120,24 @@ const Upgrade = () => {
               </CardHeader>
               
               <CardContent className="space-y-6">
-                <div className="flex items-center justify-center gap-4 p-4 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/30 dark:border-primary/70">
+                <div className="flex items-center justify-center gap-4 p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-yellow-300 dark:border-yellow-700">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setPackQuantity(Math.max(1, packQuantity - 1))}
                     disabled={packQuantity <= 1}
-                    className="border-primary/50 hover:bg-primary/10 dark:hover:bg-primary/30"
+                    className="border-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-950/30"
                   >
                     <Minus className="h-4 w-4" />
                   </Button>
-                  <span className="text-lg font-medium text-primary">
+                  <span className="text-lg font-medium text-amber-800 dark:text-amber-200">
                     {packQuantity} × 100 videos
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setPackQuantity(packQuantity + 1)}
-                    className="border-primary/50 hover:bg-primary/10 dark:hover:bg-primary/30"
+                    className="border-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-950/30"
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -149,7 +146,7 @@ const Upgrade = () => {
                 <ul className="space-y-3">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-center gap-3">
-                      <Check className="h-5 w-5 text-primary flex-shrink-0" />
+                      <Check className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
                       <span className="text-foreground">{feature}</span>
                     </li>
                   ))}

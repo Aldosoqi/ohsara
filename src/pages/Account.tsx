@@ -127,7 +127,7 @@ const Account = () => {
     navigate("/auth");
     return null;
   }
-  return <div className="min-h-screen">
+  return <div className="min-h-screen bg-background">
       <div className="flex">
         {/* Left Sidebar */}
         <div className="w-64 bg-muted/30 border-r border-border min-h-screen p-4">
@@ -448,7 +448,7 @@ const Account = () => {
                       when it's completed so you don't miss your results.
                     </p>
                     <div className="flex items-center space-x-2 text-sm">
-                      <div className="w-2 h-2 bg-primary rounded-full"></div>
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                       <span className="text-muted-foreground">Active when request notifications are enabled</span>
                     </div>
                   </div>
