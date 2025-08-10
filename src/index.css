@@ -119,7 +119,11 @@ All colors MUST be HSL for consistent theming.
   }
 
   body {
-    @apply bg-background text-foreground font-inter;
+    @apply text-foreground font-inter;
+    background: linear-gradient(135deg,
+        hsl(30 40% 40%) 0%,
+        hsl(0 0% 25%) 50%,
+        hsl(220 60% 20%) 100%);
   }
 }
 

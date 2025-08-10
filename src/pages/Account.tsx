@@ -127,7 +127,7 @@ const Account = () => {
     navigate("/auth");
     return null;
   }
-  return <div className="min-h-screen bg-background">
+  return <div className="min-h-screen">
       <div className="flex">
         {/* Left Sidebar */}
         <div className="w-64 bg-muted/30 border-r border-border min-h-screen p-4">
