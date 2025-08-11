@@ -21,6 +21,7 @@ export default {
                         fontFamily: {
                                 'inter': ['Inter', 'sans-serif'],
                                 'changa': ['"Changa One"', 'sans-serif'],
+                                'lilita': ['"Lilita One"', 'system-ui', 'sans-serif'],
                         },
 			colors: {
 				border: 'hsl(var(--border))',

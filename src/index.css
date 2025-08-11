@@ -69,6 +69,9 @@ All colors MUST be HSL for consistent theming.
     --gradient-auth-card: linear-gradient(145deg, hsl(0 0% 100% / 0.8), hsl(0 0% 100% / 0.4));
     --gradient-auth-button: linear-gradient(135deg, hsl(176 23% 37%) 0%, hsl(176 30% 42%) 100%);
     
+    /* App background - Extinguisher vibe (warm red gradient) */
+    --gradient-extinguisher: linear-gradient(180deg, hsl(2 85% 98%) 0%, hsl(2 80% 96%) 30%, hsl(2 65% 92%) 100%);
+    
     /* Glass effect */
     --glass-bg: rgba(255, 255, 255, 0.25);
     --glass-border: rgba(255, 255, 255, 0.3);
@@ -119,8 +122,22 @@ All colors MUST be HSL for consistent theming.
   }
 
   body {
-    @apply bg-background text-foreground font-inter;
+    @apply text-foreground font-inter;
+    background-color: hsl(var(--background));
+    background-image: var(--gradient-extinguisher);
+    background-attachment: fixed;
+    background-size: cover;
   }
+
+  h1, h2, h3 {
+    @apply font-lilita text-foreground;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+
+  h1 { @apply text-3xl; }
+  h2 { @apply text-2xl; }
+  h3 { @apply text-xl; }
 }
 
 @layer components {
@@ -136,7 +153,18 @@ All colors MUST be HSL for consistent theming.
   }
   
   .summary-section {
-    @apply bg-card border border-border rounded-lg p-6 space-y-4;
+    @apply bg-card border border-border rounded-lg p-7 space-y-4 shadow-subtle;
+  }
+
+  .summary-section p,
+  .summary-section li {
+    @apply text-base leading-7 text-foreground;
+  }
+
+  .summary-section h1,
+  .summary-section h2,
+  .summary-section h3 {
+    @apply font-lilita text-foreground;
   }
   
   .loading-bar {
