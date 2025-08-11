@@ -89,10 +89,28 @@ serve(async (req) => {
       throw new Error("No data returned from Apify");
     }
 
-    // Extract transcript with timestamps
-    const transcript = item.transcript || [];
-    const title = item.title || "";
-    const thumbnail = item.thumbnail || "";
+    // Extract transcript with timestamps (handle different shapes)
+    const transcript = Array.isArray(item?.data)
+      ? item.data
+      : (Array.isArray(item?.transcript) ? item.transcript : []);
+
+    // Try to get title/thumbnail from Apify first
+    let title: string = item?.title || "";
+    let thumbnail: string = item?.thumbnail || item?.thumbnailUrl || "";
+
+    // Fallback to YouTube oEmbed if missing
+    if ((!title || !thumbnail) && url) {
+      try {
+        const oembed = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+        if (oembed.ok) {
+          const o = await oembed.json();
+          title = title || o?.title || "";
+          thumbnail = thumbnail || o?.thumbnail_url || "";
+        }
+      } catch (_) {
+        // ignore oEmbed failure, keep defaults
+      }
+    }
 
     // Analyze with OpenAI
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
