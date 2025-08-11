@@ -48,7 +48,7 @@ serve(async (req) => {
         });
       }
 
-      const { error: deductError } = await supabase.rpc('update_user_credits', {
+      const { error: deductError } = await supabase.rpc('apply_user_credits', {
         user_id_param: userId,
         credit_amount: -0.5,
         transaction_type_param: 'chat',
@@ -126,7 +126,7 @@ When referencing specific information, always include relevant timestamps in you
 
     if (creditsDeducted && userId) {
       try {
-        await supabase.rpc('update_user_credits', {
+        await supabase.rpc('apply_user_credits', {
           user_id_param: userId,
           credit_amount: 0.5,
           transaction_type_param: 'refund',

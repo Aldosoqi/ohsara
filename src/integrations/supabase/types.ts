@@ -225,6 +225,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_user_credits: {
+        Args: {
+          user_id_param: string
+          credit_amount: number
+          transaction_type_param: string
+          description_param?: string
+          reference_id_param?: string
+        }
+        Returns: boolean
+      }
+      deduct_user_credits: {
+        Args: {
+          user_id_param: string
+          credit_amount: number
+          description_param?: string
+          reference_id_param?: string
+        }
+        Returns: boolean
+      }
       purchase_credit_pack: {
         Args: {
           user_id_param: string
@@ -232,6 +251,15 @@ export type Database = {
           stripe_payment_intent_id_param: string
         }
         Returns: string
+      }
+      refund_user_credits: {
+        Args: {
+          user_id_param: string
+          credit_amount: number
+          description_param?: string
+          reference_id_param?: string
+        }
+        Returns: boolean
       }
       update_user_credits: {
         Args:

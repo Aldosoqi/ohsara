@@ -65,9 +65,9 @@ serve(async (req) => {
         });
       }
 
-      const { error: deductError } = await supabase.rpc('update_user_credits', {
+      const { error: deductError } = await supabase.rpc('apply_user_credits', {
         user_id_param: userId,
-        credit_amount: -4,
+        credit_amount: -4.0,
         transaction_type_param: 'analysis',
         description_param: 'YouTube title & thumbnail recognition',
         reference_id_param: null
@@ -259,9 +259,9 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
 
     if (creditsDeducted && userId) {
       try {
-        await supabase.rpc('update_user_credits', {
+        await supabase.rpc('apply_user_credits', {
           user_id_param: userId,
-          credit_amount: 4,
+          credit_amount: 4.0,
           transaction_type_param: 'refund',
           description_param: 'Analysis failed - refund'
         });
