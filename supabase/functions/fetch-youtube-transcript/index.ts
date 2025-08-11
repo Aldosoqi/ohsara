@@ -174,14 +174,39 @@ Return only the segments that contain the key information the user is seeking, m
     const extractData = await extractResp.json();
     const extractedContent = extractData.choices[0].message.content;
 
-    // Deduct credits if user is authenticated
+    // Deduct credits and save history if user is authenticated
+    let remainingCredits: number | null = null;
     if (userId) {
-      await supabase.rpc('update_user_credits', {
-        user_id_param: userId,
-        credit_amount: -4,
-        transaction_type_param: 'analysis',
-        description_param: 'YouTube video analysis'
-      });
+      // 1) Save to history (summaries)
+      try {
+        await supabase.from('summaries').insert({
+          user_id: userId,
+          youtube_url: url,
+          video_title: title || null,
+          thumbnail_url: thumbnail || null,
+          summary: extractedContent || analysis || ''
+        });
+      } catch (e) {
+        console.error('Failed to insert summary history:', e);
+      }
+
+      // 2) Deduct credits
+      try {
+        await supabase.rpc('update_user_credits', {
+          user_id_param: userId,
+          credit_amount: -4,
+          transaction_type_param: 'analysis',
+          description_param: 'YouTube title & thumbnail recognition'
+        });
+        const { data: profileAfter } = await supabase
+          .from('profiles')
+          .select('credits')
+          .eq('user_id', userId)
+          .maybeSingle();
+        remainingCredits = (profileAfter as any)?.credits ?? null;
+      } catch (e) {
+        console.error('Failed to deduct credits:', e);
+      }
     }
 
     return new Response(JSON.stringify({
@@ -190,6 +215,8 @@ Return only the segments that contain the key information the user is seeking, m
       analysis,
       extractedContent,
       fullTranscript: transcript,
+      creditsDeducted: userId ? 4 : 0,
+      remainingCredits,
       raw: data
     }), {
       headers: {

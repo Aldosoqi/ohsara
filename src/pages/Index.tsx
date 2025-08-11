@@ -7,6 +7,10 @@ import { SuggestionPills } from "@/components/SuggestionPills";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettings } from "@/hooks/useSettings";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Bot, User } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 const Index = () => {
   const {
     user,
@@ -92,6 +96,7 @@ const Index = () => {
                       fullTranscript: data.fullTranscript
                     });
                     setStep("ready");
+                    toast({ title: "4 credits used", description: "Title & thumbnail analysis completed." });
                   } catch (e) {
                     console.error(e);
                     setStep("url");
@@ -127,17 +132,17 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Video Analysis */}
-              <div className="border rounded-lg p-4 bg-muted/30">
+              <div className="border rounded-lg p-4 bg-card">
                 <h4 className="font-medium mb-2 text-primary">📊 Video analysis</h4>
-                <p className="text-sm leading-relaxed whitespace-pre-line">{videoData.analysis}</p>
+                <div className="prose prose-sm max-w-none text-muted-foreground">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{videoData.analysis}</ReactMarkdown>
+                </div>
               </div>
 
-              {/* Extracted Content */}
               <div className="border rounded-lg p-4">
                 <h4 className="font-medium mb-3 text-primary">📝 Extracted Key Content</h4>
-                <div className="prose prose-sm max-w-none text-sm leading-relaxed whitespace-pre-line">
-                  {videoData.extractedContent}
+                <div className="prose prose-sm max-w-none text-muted-foreground">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{videoData.extractedContent}</ReactMarkdown>
                 </div>
               </div>
 
@@ -146,9 +151,16 @@ const Index = () => {
                 <h4 className="font-medium mb-3 text-primary">💬 Chat for more details</h4>
                 <div className="space-y-3 max-h-[40vh] overflow-auto pr-2">
                   {messages.map((m, idx) => (
-                    <div key={idx} className={`text-sm leading-relaxed ${m.role === 'user' ? 'text-foreground font-medium' : 'text-foreground/90'}`}>
-                      <span className="text-xs text-muted-foreground mr-2 uppercase">{m.role === 'user' ? 'You' : 'Ohsara'}:</span>
-                      <span>{m.content}</span>
+                    <div key={idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex items-start gap-3 max-w-[80%] rounded-2xl px-4 py-3 border ${
+                        m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                      }`}>
+                        {m.role === 'assistant' && <Bot className="w-4 h-4 mt-1 opacity-70" />}
+                        <div className="prose prose-sm max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                        </div>
+                        {m.role === 'user' && <User className="w-4 h-4 mt-1 opacity-90" />}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -185,6 +197,7 @@ const Index = () => {
                         const data = await resp.json();
                         const reply = data?.content || 'No response available';
                         setMessages((cur) => [...cur, { role: 'assistant', content: reply }]);
+                        toast({ title: "0.5 credit used", description: "Chat message processed." });
                       } catch (e) {
                         console.error(e);
                         setMessages((cur) => [...cur, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }]);

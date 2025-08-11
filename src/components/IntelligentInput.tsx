@@ -250,9 +250,10 @@ export function IntelligentInput() {
               <div className="flex items-center gap-2 font-medium mb-3"><MessagesSquare className="w-4 h-4"/> Chat with the video</div>
               <div className="space-y-4 max-h-[48vh] overflow-auto pr-2">
                 {messages.map((m, idx) => (
-                  <div key={idx} className={`text-sm leading-relaxed ${m.role === 'user' ? 'text-foreground' : 'text-foreground/90'}`}>
-                    <span className="text-muted-foreground mr-2">{m.role === 'user' ? 'You' : 'Ohsara'}:</span>
-                    <div className="inline">{renderMarkdown(m.content)}</div>
+                  <div key={idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`flex items-start gap-3 max-w-[80%] rounded-2xl px-4 py-3 border ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                      <div className="prose prose-sm max-w-none">{renderMarkdown(m.content)}</div>
+                    </div>
                   </div>
                 ))}
               </div>
