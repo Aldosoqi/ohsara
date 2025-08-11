@@ -3,16 +3,16 @@ import { AppSidebar } from "./AppSidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { Menu, Coins } from "lucide-react";
-
 interface MainLayoutProps {
   children: React.ReactNode;
 }
-
-export function MainLayout({ children }: MainLayoutProps) {
-  const { profile } = useAuth();
-  
-  return (
-    <SidebarProvider>
+export function MainLayout({
+  children
+}: MainLayoutProps) {
+  const {
+    profile
+  } = useAuth();
+  return <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         
@@ -24,17 +24,7 @@ export function MainLayout({ children }: MainLayoutProps) {
             </SidebarTrigger>
             
             {/* Credits tracker */}
-            <Card className="bg-card/50 border-border/50 shadow-none">
-              <CardContent className="flex items-center gap-2 py-1.5 px-3">
-                <div className="inline-flex items-center justify-center w-6 h-6 bg-primary/10 rounded-full">
-                  <Coins className="h-3 w-3 text-primary" />
-                </div>
-                <div className="text-xs">
-                  <span className="text-muted-foreground">Credits: </span>
-                  <span className="font-medium text-foreground">{profile?.credits || 0}</span>
-                </div>
-              </CardContent>
-            </Card>
+            
           </header>
 
           {/* Main content */}
@@ -43,6 +33,5 @@ export function MainLayout({ children }: MainLayoutProps) {
           </main>
         </div>
       </div>
-    </SidebarProvider>
-  );
+    </SidebarProvider>;
 }
