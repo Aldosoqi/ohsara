@@ -100,14 +100,14 @@ serve(async (req) => {
       throw new Error("Missing OpenAI API key");
     }
 
-    const analysisPrompt = `Analyze this YouTube video based on its title and thumbnail to understand what the user expects from this content:
-
-Title: "${title}"
-Thumbnail URL: ${thumbnail}
-
-Based on the title and visual elements you can infer from the thumbnail URL, extract the key topics, expectations, and main value propositions that a viewer would expect from this video. Focus on what specific information or insights the user is likely seeking.
-
-Return your analysis as a structured response indicating the main expectations and key topics.`;
+    // Build multimodal user content including thumbnail image
+    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+      { type: 'text', text: 'Analyze this YouTube video title and thumbnail. Extract keywords from the title and describe notable visual properties on the thumbnail to infer what the viewer expects from this video.' },
+      { type: 'text', text: `Title: "${title}"` },
+    ];
+    if (thumbnail) {
+      userContent.push({ type: 'image_url', image_url: { url: thumbnail } });
+    }
 
     const openAIResp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -119,7 +119,7 @@ Return your analysis as a structured response indicating the main expectations a
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: 'You are an expert at analyzing video content and user expectations.' },
-          { role: 'user', content: analysisPrompt }
+          { role: 'user', content: userContent }
         ],
         max_tokens: 500
       }),

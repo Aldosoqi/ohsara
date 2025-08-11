@@ -169,7 +169,7 @@ const Index = () => {
                       try {
                         const { data: { session } } = await supabase.auth.getSession();
                         const accessToken = session?.access_token;
-                        const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/video-chat`, {
+                        const resp = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/youtube-chat`, {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',

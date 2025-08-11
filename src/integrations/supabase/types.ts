@@ -141,7 +141,7 @@ export type Database = {
           appearance_preference: string | null
           avatar_url: string | null
           created_at: string
-          credits: number | null
+          credits: number
           full_name: string | null
           id: string
           language_preference: string | null
@@ -154,7 +154,7 @@ export type Database = {
           appearance_preference?: string | null
           avatar_url?: string | null
           created_at?: string
-          credits?: number | null
+          credits?: number
           full_name?: string | null
           id?: string
           language_preference?: string | null
@@ -167,7 +167,7 @@ export type Database = {
           appearance_preference?: string | null
           avatar_url?: string | null
           created_at?: string
-          credits?: number | null
+          credits?: number
           full_name?: string | null
           id?: string
           language_preference?: string | null
@@ -234,13 +234,21 @@ export type Database = {
         Returns: string
       }
       update_user_credits: {
-        Args: {
-          user_id_param: string
-          credit_amount: number
-          transaction_type_param: string
-          description_param?: string
-          reference_id_param?: string
-        }
+        Args:
+          | {
+              user_id_param: string
+              credit_amount: number
+              transaction_type_param: string
+              description_param?: string
+              reference_id_param?: string
+            }
+          | {
+              user_id_param: string
+              credit_amount: number
+              transaction_type_param: string
+              description_param?: string
+              reference_id_param?: string
+            }
         Returns: boolean
       }
     }
