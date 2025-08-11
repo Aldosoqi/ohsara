@@ -52,7 +52,8 @@ serve(async (req) => {
         user_id_param: userId,
         credit_amount: -0.5,
         transaction_type_param: 'chat',
-        description_param: 'YouTube chat message'
+        description_param: 'YouTube chat message',
+        reference_id_param: null
       });
 
       if (deductError) {

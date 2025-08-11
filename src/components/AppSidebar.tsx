@@ -1,5 +1,6 @@
-import { Home, History, User, Crown, Settings } from "lucide-react";
+import { Home, History, User, Crown, Settings, Coins } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Sidebar,
   SidebarContent,
@@ -24,13 +25,14 @@ const navigationItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const { profile } = useAuth();
 
   return (
     <Sidebar
       className={`${isCollapsed ? "w-16" : "w-64"} border-r border-sidebar-border`}
       collapsible="icon"
     >
-      <SidebarContent className="bg-sidebar">
+      <SidebarContent className="bg-sidebar flex flex-col">
         {/* Logo */}
         <div className="p-6 border-b border-sidebar-border">
           <div className="ohsara-logo text-xl font-semibold">
@@ -62,6 +64,33 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {/* Credits footer */}
+        <div className="mt-auto p-4 border-t border-sidebar-border">
+          {isCollapsed ? (
+            <div className="flex items-center justify-center">
+              <div className="inline-flex items-center gap-2 px-2 py-1 rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
+                <Coins className="h-4 w-4" />
+                <span className="text-sm font-medium">{Number(profile?.credits ?? 0).toFixed(1)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="inline-flex items-center justify-center w-6 h-6 bg-sidebar-accent rounded-full">
+                  <Coins className="h-3 w-3 text-sidebar-accent-foreground" />
+                </div>
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Credits: </span>
+                  <span className="font-semibold text-foreground">{Number(profile?.credits ?? 0).toFixed(1)}</span>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground leading-relaxed">
+                <p>• Analysis uses 4 credits</p>
+                <p>• Chat uses 0.5 credit per message</p>
+              </div>
+            </div>
+          )}
+        </div>
 
       </SidebarContent>
     </Sidebar>

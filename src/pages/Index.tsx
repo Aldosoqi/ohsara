@@ -12,10 +12,7 @@ import remarkGfm from "remark-gfm";
 import { Bot, User } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 const Index = () => {
-  const {
-    user,
-    loading
-  } = useAuth();
+  const { user, loading, refreshProfile } = useAuth();
   const {
     homepageWidgets
   } = useSettings();
@@ -97,6 +94,7 @@ const Index = () => {
                     });
                     setStep("ready");
                     toast({ title: "4 credits used", description: "Title & thumbnail analysis completed." });
+                    await refreshProfile();
                   } catch (e) {
                     console.error(e);
                     setStep("url");
@@ -134,16 +132,16 @@ const Index = () => {
 
               <div className="border rounded-lg p-4 bg-card">
                 <h4 className="font-medium mb-2 text-primary">📊 Video analysis</h4>
-                <div className="prose prose-sm max-w-none text-muted-foreground">
+                <article dir="ltr" className="prose prose-sm max-w-none text-foreground">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{videoData.analysis}</ReactMarkdown>
-                </div>
+                </article>
               </div>
 
               <div className="border rounded-lg p-4">
                 <h4 className="font-medium mb-3 text-primary">📝 Extracted Key Content</h4>
-                <div className="prose prose-sm max-w-none text-muted-foreground">
+                <article dir="ltr" className="prose prose-sm max-w-none text-foreground">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{videoData.extractedContent}</ReactMarkdown>
-                </div>
+                </article>
               </div>
 
               {/* Chat Interface */}
@@ -156,7 +154,7 @@ const Index = () => {
                         m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
                       }`}>
                         {m.role === 'assistant' && <Bot className="w-4 h-4 mt-1 opacity-70" />}
-                        <div className="prose prose-sm max-w-none">
+                        <div dir="ltr" className="prose prose-sm max-w-none text-foreground">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                         </div>
                         {m.role === 'user' && <User className="w-4 h-4 mt-1 opacity-90" />}
@@ -198,6 +196,7 @@ const Index = () => {
                         const reply = data?.content || 'No response available';
                         setMessages((cur) => [...cur, { role: 'assistant', content: reply }]);
                         toast({ title: "0.5 credit used", description: "Chat message processed." });
+                        await refreshProfile();
                       } catch (e) {
                         console.error(e);
                         setMessages((cur) => [...cur, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }]);

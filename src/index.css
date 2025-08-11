@@ -19,7 +19,7 @@ All colors MUST be HSL for consistent theming.
     --popover-foreground: 0 0% 20%;
 
     /* Primary - Sophisticated dark teal accent */
-    --primary: 176 23% 37%; /* #3B857E */
+    --primary: 176 20% 36%; /* slightly more matte teal */
     --primary-foreground: 0 0% 98%;
 
     /* Secondary - Clean backgrounds */
@@ -27,8 +27,8 @@ All colors MUST be HSL for consistent theming.
     --secondary-foreground: 0 0% 20%;
 
     /* Muted - Subtle variations */
-    --muted: 45 9% 94.1%;
-    --muted-foreground: 0 0% 45%; /* #737373 */
+    --muted: 45 8% 93.5%;
+    --muted-foreground: 0 0% 42%; /* slightly softer */
 
     /* Accent - Teal variations */
     --accent: 176 23% 37%;
@@ -39,7 +39,7 @@ All colors MUST be HSL for consistent theming.
     --destructive-foreground: 0 0% 98%;
 
     /* Borders - Very light gray */
-    --border: 0 0% 91.8%; /* #EAEAEA */
+    --border: 0 0% 90%; /* slightly stronger separation */
     --input: 0 0% 91.8%;
     --ring: 176 23% 37%; /* Teal focus ring */
 

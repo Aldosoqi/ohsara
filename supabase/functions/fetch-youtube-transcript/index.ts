@@ -69,7 +69,8 @@ serve(async (req) => {
         user_id_param: userId,
         credit_amount: -4,
         transaction_type_param: 'analysis',
-        description_param: 'YouTube title & thumbnail recognition'
+        description_param: 'YouTube title & thumbnail recognition',
+        reference_id_param: null
       });
 
       if (deductError) {
