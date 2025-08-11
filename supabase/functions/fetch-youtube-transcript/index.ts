@@ -14,6 +14,12 @@ serve(async (req) => {
     });
   }
 
+  let userId: string | null = null;
+  let creditsDeducted = false;
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
   try {
     const { url } = await req.json().catch(() => ({
       url: undefined
@@ -33,17 +39,13 @@ serve(async (req) => {
 
     // Get auth user
     const authHeader = req.headers.get('Authorization');
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    let userId = null;
     if (authHeader) {
       const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-      userId = user?.id;
+      userId = user?.id || null;
     }
 
-    // Check credits if user is authenticated
+    // Check and deduct credits if user is authenticated
     if (userId) {
       const { data: profile } = await supabase
         .from('profiles')
@@ -62,6 +64,22 @@ serve(async (req) => {
           }
         });
       }
+
+      const { error: deductError } = await supabase.rpc('update_user_credits', {
+        user_id_param: userId,
+        credit_amount: -4,
+        transaction_type_param: 'analysis',
+        description_param: 'YouTube title & thumbnail recognition'
+      });
+
+      if (deductError) {
+        return new Response(JSON.stringify({ error: 'Failed to deduct credits' }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      creditsDeducted = true;
     }
 
     const apifyToken = "apify_api_ja0f7NdWfQvdRaWbP3Ts0Arnbn2n6c2zR7DI";
@@ -172,10 +190,9 @@ ${transcript.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
     const extractData = await extractResp.json();
     const extractedContent = extractData.choices[0].message.content;
 
-    // Deduct credits and save history if user is authenticated
+    // Save history and fetch remaining credits if user is authenticated
     let remainingCredits: number | null = null;
     if (userId) {
-      // 1) Save to history (summaries)
       try {
         await supabase.from('summaries').insert({
           user_id: userId,
@@ -188,22 +205,15 @@ ${transcript.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
         console.error('Failed to insert summary history:', e);
       }
 
-      // 2) Deduct credits
       try {
-        await supabase.rpc('update_user_credits', {
-          user_id_param: userId,
-          credit_amount: -4,
-          transaction_type_param: 'analysis',
-          description_param: 'YouTube title & thumbnail recognition'
-        });
         const { data: profileAfter } = await supabase
           .from('profiles')
           .select('credits')
           .eq('user_id', userId)
-          .maybeSingle();
-        remainingCredits = (profileAfter as any)?.credits ?? null;
+          .maybeSingle<{ credits: number }>();
+        remainingCredits = profileAfter?.credits ?? null;
       } catch (e) {
-        console.error('Failed to deduct credits:', e);
+        console.error('Failed to fetch remaining credits:', e);
       }
     }
 
@@ -225,6 +235,20 @@ ${transcript.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
 
   } catch (error) {
     console.error("fetch-youtube-transcript error:", error);
+
+    if (creditsDeducted && userId) {
+      try {
+        await supabase.rpc('update_user_credits', {
+          user_id_param: userId,
+          credit_amount: 4,
+          transaction_type_param: 'refund',
+          description_param: 'Analysis failed - refund'
+        });
+      } catch (refundError) {
+        console.error('Failed to refund credits:', refundError);
+      }
+    }
+
     return new Response(JSON.stringify({
       error: "Unexpected error",
       details: error.message

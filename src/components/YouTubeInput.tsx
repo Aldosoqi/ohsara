@@ -177,20 +177,12 @@ export function YouTubeInput() {
     } catch (error) {
       console.error('Error processing video:', error);
 
-      // Only refund credit if summary was created (meaning we actually charged the user)
+      // Clean up incomplete summary if one was created
       if (currentSummaryId) {
         try {
-          await supabase.rpc('update_user_credits', {
-            user_id_param: (await supabase.auth.getSession()).data.session?.user?.id,
-            credit_amount: 1,
-            transaction_type_param: 'refund',
-            description_param: 'Processing failed - refunded'
-          });
-
-          // Delete the incomplete summary record
           await supabase.from('summaries').delete().eq('id', currentSummaryId);
-        } catch (refundError) {
-          console.error('Failed to refund credit:', refundError);
+        } catch (cleanupError) {
+          console.error('Failed to clean up summary:', cleanupError);
         }
       }
 

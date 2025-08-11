@@ -12,22 +12,23 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let userId: string | null = null;
+  let creditsDeducted = false;
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
   try {
     const { messages, extractedContent, fullTranscript } = await req.json();
 
     // Get auth user
     const authHeader = req.headers.get('Authorization');
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    let userId = null;
     if (authHeader) {
       const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-      userId = user?.id;
+      userId = user?.id || null;
     }
 
-    // Check credits if user is authenticated
+    // Check and deduct credits if user is authenticated
     if (userId) {
       const { data: profile } = await supabase
         .from('profiles')
@@ -46,6 +47,22 @@ serve(async (req) => {
           }
         });
       }
+
+      const { error: deductError } = await supabase.rpc('update_user_credits', {
+        user_id_param: userId,
+        credit_amount: -0.5,
+        transaction_type_param: 'chat',
+        description_param: 'YouTube chat message'
+      });
+
+      if (deductError) {
+        return new Response(JSON.stringify({ error: 'Failed to deduct credits' }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      creditsDeducted = true;
     }
 
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
@@ -89,22 +106,36 @@ When referencing specific information, always include relevant timestamps in you
     const data = await response.json();
     const reply = data.choices[0].message.content;
 
-    // Deduct credits if user is authenticated
+    let remainingCredits: number | null = null;
     if (userId) {
-      await supabase.rpc('update_user_credits', {
-        user_id_param: userId,
-        credit_amount: -0.5,
-        transaction_type_param: 'chat',
-        description_param: 'YouTube chat message'
-      });
+      const { data: profileAfter } = await supabase
+        .from('profiles')
+        .select('credits')
+        .eq('user_id', userId)
+        .maybeSingle<{ credits: number }>();
+      remainingCredits = profileAfter?.credits ?? null;
     }
 
-    return new Response(JSON.stringify({ content: reply }), {
+    return new Response(JSON.stringify({ content: reply, creditsDeducted: userId ? 0.5 : 0, remainingCredits }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('Error in youtube-chat function:', error);
+
+    if (creditsDeducted && userId) {
+      try {
+        await supabase.rpc('update_user_credits', {
+          user_id_param: userId,
+          credit_amount: 0.5,
+          transaction_type_param: 'refund',
+          description_param: 'Chat message refund'
+        });
+      } catch (refundError) {
+        console.error('Failed to refund credits:', refundError);
+      }
+    }
+
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
