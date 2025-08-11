@@ -47,13 +47,17 @@ serve(async (req) => {
 
     // Check and deduct credits if user is authenticated
     if (userId) {
-      const { data: profile } = await supabase
+      const { data: profile, error: profileErr } = await supabase
         .from('profiles')
         .select('credits')
         .eq('user_id', userId)
         .single();
 
-      if (!profile || profile.credits < 4) {
+      if (profileErr || !profile) {
+        return new Response(JSON.stringify({ error: "Profile not found" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if ((profile.credits as number) < 4) {
         return new Response(JSON.stringify({
           error: "Insufficient credits. Need 4 credits for analysis."
         }), {
@@ -65,20 +69,25 @@ serve(async (req) => {
         });
       }
 
-      const { error: deductError } = await supabase.rpc('apply_user_credits', {
-        user_id_param: userId,
-        credit_amount: -4.0,
-        transaction_type_param: 'analysis',
-        description_param: 'YouTube title & thumbnail recognition',
-        reference_id_param: null
-      });
+      const { error: updErr } = await supabase
+        .from('profiles')
+        .update({ credits: (profile.credits as number) - 4 })
+        .eq('user_id', userId);
 
-      if (deductError) {
+      if (updErr) {
         return new Response(JSON.stringify({ error: 'Failed to deduct credits' }), {
           status: 402,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
+
+      // best-effort transaction log
+      await supabase.from('credit_transactions').insert({
+        user_id: userId,
+        amount: -4,
+        transaction_type: 'analysis',
+        description: 'YouTube title & thumbnail recognition'
+      });
 
       creditsDeducted = true;
     }
@@ -259,12 +268,23 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
 
     if (creditsDeducted && userId) {
       try {
-        await supabase.rpc('apply_user_credits', {
-          user_id_param: userId,
-          credit_amount: 4.0,
-          transaction_type_param: 'refund',
-          description_param: 'Analysis failed - refund'
-        });
+        const { data: profileAfter, error: profErr } = await supabase
+          .from('profiles')
+          .select('credits')
+          .eq('user_id', userId)
+          .single();
+        if (!profErr && profileAfter) {
+          await supabase
+            .from('profiles')
+            .update({ credits: (profileAfter.credits as number) + 4 })
+            .eq('user_id', userId);
+          await supabase.from('credit_transactions').insert({
+            user_id: userId,
+            amount: 4,
+            transaction_type: 'refund',
+            description: 'Analysis failed - refund'
+          });
+        }
       } catch (refundError) {
         console.error('Failed to refund credits:', refundError);
       }

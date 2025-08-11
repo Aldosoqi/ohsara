@@ -123,7 +123,7 @@ const Index = () => {
               <div className="border rounded-lg overflow-hidden bg-card">
                 <img 
                   src={videoData.thumbnail} 
-                  alt="Video thumbnail" 
+                  alt={`Thumbnail of ${videoData.title}`} 
                   className="w-full aspect-video object-cover"
                 />
                 <div className="p-4">
