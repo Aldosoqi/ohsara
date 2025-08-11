@@ -55,16 +55,16 @@ serve(async (req) => {
 
     // Build context from extracted content and full transcript
     const context = `
-Extracted relevant content with timestamps: ${extractedContent}
+Key content addressing viewer expectations: ${extractedContent}
 
-Full transcript available for reference: ${fullTranscript?.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}
+Full transcript with timestamps for reference: ${fullTranscript?.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}
 `;
 
     const systemMessage = {
       role: 'system',
-      content: `You are an AI assistant helping users understand YouTube video content. You have access to both the most relevant extracted content and the full transcript with timestamps. 
+      content: `You are an AI assistant helping users understand YouTube video content. You have access to a summary of key content addressing the viewer's expectations and the full transcript with timestamps. 
 
-Focus primarily on the extracted content as it contains the most relevant information based on the user's expected needs from the video. Use the full transcript for additional context when needed.
+Focus primarily on the key content summary as it contains the most relevant information based on the user's expected needs from the video. Use the full transcript for additional context or to provide timestamps when needed.
 
 When referencing specific information, always include relevant timestamps in your response so users can jump to that part of the video.`
     };

@@ -147,13 +147,11 @@ serve(async (req) => {
     const analysis = openAIData.choices[0].message.content;
 
     // Extract relevant transcript parts with timestamps
-    const extractPrompt = `Based on this analysis of user expectations: "${analysis}"
+    const extractPrompt = `The viewer expects: "${analysis}"
 
-Extract the most relevant parts from this transcript that directly address what the user is expecting. Include the timestamp for each relevant segment:
+Using the transcript below, provide a concise answer that fulfills these expectations. Synthesize the information instead of quoting transcript segments or timestamps. Respond in a clear, reader-friendly format:
 
-${transcript.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}
-
-Return only the segments that contain the key information the user is seeking, maintaining the timestamp format.`;
+${transcript.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
 
     const extractResp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -164,7 +162,7 @@ Return only the segments that contain the key information the user is seeking, m
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are an expert at extracting relevant information from transcripts.' },
+          { role: 'system', content: 'You are an expert at extracting relevant information from transcripts and providing concise answers to viewer expectations.' },
           { role: 'user', content: extractPrompt }
         ],
         max_tokens: 1000
