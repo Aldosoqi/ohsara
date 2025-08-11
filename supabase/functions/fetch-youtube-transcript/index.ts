@@ -83,7 +83,10 @@ serve(async (req) => {
       creditsDeducted = true;
     }
 
-    const apifyToken = "apify_api_ja0f7NdWfQvdRaWbP3Ts0Arnbn2n6c2zR7DI";
+    const apifyToken = Deno.env.get('APIFY_API_TOKEN') || Deno.env.get('APIFY_API_KEY');
+    if (!apifyToken) {
+      throw new Error('Missing Apify API token. Set APIFY_API_TOKEN or APIFY_API_KEY in Supabase Function Secrets.');
+    }
     const endpoint = `https://api.apify.com/v2/acts/pintostudio~youtube-transcript-scraper/run-sync-get-dataset-items?token=${apifyToken}`;
     
     const apifyResp = await fetch(endpoint, {
@@ -102,17 +105,33 @@ serve(async (req) => {
     }
 
     const data = await apifyResp.json();
-    const item = Array.isArray(data) ? data[0] : data;
-    
-    if (!item) {
-      throw new Error("No data returned from Apify");
+
+    // Apify may return either the transcript array directly, or an object/array containing it
+    let transcript: Array<{ start: string; dur?: string; text?: string }> = [];
+    if (Array.isArray(data)) {
+      if (data.length && (typeof data[0]?.start !== 'undefined' || typeof data[0]?.text !== 'undefined')) {
+        transcript = data as typeof transcript;
+      } else if (data[0]?.data && Array.isArray(data[0].data)) {
+        transcript = data[0].data;
+      } else if (data[0]?.transcript && Array.isArray(data[0].transcript)) {
+        transcript = data[0].transcript;
+      }
+    } else if (data?.data && Array.isArray(data.data)) {
+      transcript = data.data;
+    } else if (data?.transcript && Array.isArray(data.transcript)) {
+      transcript = data.transcript;
     }
 
-    // Extract transcript with timestamps (handle different shapes)
-    const transcript = Array.isArray(item?.data)
-      ? item.data
-      : (Array.isArray(item?.transcript) ? item.transcript : []);
+    if (!transcript || !Array.isArray(transcript) || transcript.length === 0) {
+      throw new Error("No transcript returned from Apify");
+    }
 
+    // Try to get title/thumbnail from response, otherwise fallback later
+    const item = Array.isArray(data) ? data[0] : data;
+
+    // Limit transcript length for prompt to avoid token overflows
+    const MAX_LINES = 800;
+    const transcriptForPrompt = transcript.slice(0, MAX_LINES);
     // Try to get title/thumbnail from Apify first
     let title: string = item?.title || "";
     let thumbnail: string = item?.thumbnail || item?.thumbnailUrl || "";
@@ -166,11 +185,12 @@ serve(async (req) => {
     const analysis = openAIData.choices[0].message.content;
 
     // Extract relevant transcript parts with timestamps
-    const extractPrompt = `The viewer expects: "${analysis}"
+    const extractPrompt = `Viewer intent (from title/thumbnail analysis): "${analysis}"
 
-Using the transcript below, provide a concise answer that fulfills these expectations. Synthesize the information instead of quoting transcript segments or timestamps. Respond in a clear, reader-friendly format:
+Using the transcript below (each line has a start timestamp in seconds), produce a well-structured Markdown answer with clear H1/H2/H3 headings. For each key point, include a bullet with the exact timestamp in [mm:ss] (or [hh:mm:ss]) format that the information appears. Do not invent timestamps; only use ones from the transcript. Keep the response left-to-right.
 
-${transcript.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
+Transcript:
+${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
 
     const extractResp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',

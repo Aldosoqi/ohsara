@@ -95,8 +95,9 @@ const Index = () => {
                     setStep("ready");
                     toast({ title: "4 credits used", description: "Title & thumbnail analysis completed." });
                     await refreshProfile();
-                  } catch (e) {
+                  } catch (e: any) {
                     console.error(e);
+                    toast({ title: "Analysis failed", description: e?.message || "Please check your credits and try again.", variant: "destructive" });
                     setStep("url");
                   } finally {
                     setIsLoading(false);
