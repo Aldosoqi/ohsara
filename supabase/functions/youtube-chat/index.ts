@@ -108,32 +108,25 @@ Focus primarily on the key content summary as it contains the most relevant info
 When referencing specific information, always include relevant timestamps in your response so users can jump to that part of the video.${languageInstruction}`
     };
 
-    const openAIMessages = [
-      systemMessage,
-      { role: 'system', content: context },
-      ...messages,
-    ];
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5',
-        input: openAIMessages.map((m) => ({
-          role: m.role,
-          content: typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content,
-        })),
-        text: { format: { type: 'text' }, verbosity: 'medium' },
-        reasoning: { effort: 'medium' },
-        tools: [],
-        store: true,
+        model: 'gpt-4o-mini',
+        messages: [
+          systemMessage,
+          { role: 'system', content: context },
+          ...messages
+        ],
+        max_tokens: 500
       }),
     });
 
     const data = await response.json();
-    const reply = data.output?.[0]?.content?.[0]?.text;
+    const reply = data.choices[0].message.content;
 
     let remainingCredits: number | null = null;
     if (userId) {

@@ -16,8 +16,6 @@ serve(async (req) => {
 
   let userId: string | null = null;
   let creditsDeducted = false;
-  // jobId is needed in both try and catch blocks
-  let jobId: string | null = null;
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -51,12 +49,11 @@ serve(async (req) => {
     // Check and deduct credits if user is authenticated
     if (userId) {
       // Ensure profile exists; grant default credits (5) to brand new users
-      const { data: profileData } = await supabase
+      let { data: profile, error: profileErr } = await supabase
         .from('profiles')
         .select('credits')
         .eq('user_id', userId)
-        .maybeSingle<{ credits: number }>();
-      let profile = profileData;
+        .maybeSingle();
 
       if (!profile) {
         // Insert minimal profile row; credits default is 5 per DB default
@@ -65,8 +62,8 @@ serve(async (req) => {
           .from('profiles')
           .select('credits')
           .eq('user_id', userId)
-          .single<{ credits: number }>();
-        profile = prof;
+          .single();
+        profile = prof as any;
       }
 
       if (!profile) {
@@ -109,6 +106,7 @@ serve(async (req) => {
     }
 
     // Create analysis job row to allow resuming after navigation
+    let jobId: string | null = null;
     if (userId) {
       try {
         const { data: job } = await supabase
@@ -117,9 +115,7 @@ serve(async (req) => {
           .select('id')
           .single();
         jobId = job?.id ?? null;
-      } catch (e) {
-        console.error('Failed to create analysis job:', e);
-      }
+      } catch (_) {}
     }
 
     const apifyToken = Deno.env.get('APIFY_API_TOKEN') || Deno.env.get('APIFY_API_KEY');
@@ -145,33 +141,20 @@ serve(async (req) => {
 
     const data = await apifyResp.json();
 
-    // Apify may return various shapes (array, object with `items`, etc.).
-    // Normalize to an array of items to simplify extraction.
-    const items = Array.isArray(data)
-      ? data
-      : Array.isArray(data?.items)
-        ? data.items
-        : [data];
-
+    // Apify may return either the transcript array directly, or an object/array containing it
     let transcript: Array<{ start: string; dur?: string; text?: string }> = [];
-    let item = items[0] ?? {};
-
-    for (const it of items) {
-      if (Array.isArray(it?.transcript)) {
-        transcript = it.transcript;
-        item = it;
-        break;
+    if (Array.isArray(data)) {
+      if (data.length && (typeof data[0]?.start !== 'undefined' || typeof data[0]?.text !== 'undefined')) {
+        transcript = data as typeof transcript;
+      } else if (data[0]?.data && Array.isArray(data[0].data)) {
+        transcript = data[0].data;
+      } else if (data[0]?.transcript && Array.isArray(data[0].transcript)) {
+        transcript = data[0].transcript;
       }
-      if (Array.isArray(it?.data)) {
-        transcript = it.data;
-        item = it;
-        break;
-      }
-      if (Array.isArray(it) && it.length && (typeof it[0]?.start !== 'undefined' || typeof it[0]?.text !== 'undefined')) {
-        transcript = it as typeof transcript;
-        item = {};
-        break;
-      }
+    } else if (data?.data && Array.isArray(data.data)) {
+      transcript = data.data;
+    } else if (data?.transcript && Array.isArray(data.transcript)) {
+      transcript = data.transcript;
     }
 
     if (!transcript || !Array.isArray(transcript) || transcript.length === 0) {
@@ -179,6 +162,7 @@ serve(async (req) => {
     }
 
     // Try to get title/thumbnail from response, otherwise fallback later
+    const item = Array.isArray(data) ? data[0] : data;
 
     // Limit transcript length for prompt to avoid token overflows
     const MAX_LINES = 800;
@@ -219,40 +203,24 @@ serve(async (req) => {
       userContent.push({ type: 'image_url', image_url: { url: thumbnail } });
     }
 
-    const analysisMessages = [
-      {
-        role: 'system',
-        content: `You are an expert at analyzing video content and user expectations.${languageInstruction ? ' ' + languageInstruction : ''}`
-      },
-      { role: 'user', content: userContent }
-    ];
-    const openAIResp = await fetch('https://api.openai.com/v1/responses', {
+    const openAIResp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5',
-        input: analysisMessages.map((m) => ({
-          role: m.role,
-          content: typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content,
-        })),
-        text: { format: { type: 'text' }, verbosity: 'medium' },
-        reasoning: { effort: 'medium' },
-        tools: [],
-        store: true,
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: `You are an expert at analyzing video content and user expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
+          { role: 'user', content: userContent }
+        ],
+        max_tokens: 500
       }),
     });
 
-    let analysis = '';
-    if (openAIResp.ok) {
-      const openAIData = await openAIResp.json();
-      analysis = openAIData.output?.[0]?.content?.[0]?.text
-        ?? openAIData.output_text
-        ?? openAIData.choices?.[0]?.message?.content
-        ?? '';
-    }
+    const openAIData = await openAIResp.json();
+    const analysis = openAIData.choices[0].message.content;
 
     // Extract relevant transcript parts with timestamps
     const extractPrompt = `Viewer intent (from title/thumbnail analysis): "${analysis}"
@@ -262,40 +230,24 @@ Using the transcript below (each line has a start timestamp in seconds), produce
 Transcript:
 ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
 
-    const extractMessages = [
-      {
-        role: 'system',
-        content: `You are an expert at extracting relevant information from transcripts and providing concise answers to viewer expectations.${languageInstruction ? ' ' + languageInstruction : ''}`
-      },
-      { role: 'user', content: extractPrompt }
-    ];
-    const extractResp = await fetch('https://api.openai.com/v1/responses', {
+    const extractResp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5',
-        input: extractMessages.map((m) => ({
-          role: m.role,
-          content: typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content,
-        })),
-        text: { format: { type: 'text' }, verbosity: 'medium' },
-        reasoning: { effort: 'medium' },
-        tools: [],
-        store: true,
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: `You are an expert at extracting relevant information from transcripts and providing concise answers to viewer expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
+          { role: 'user', content: extractPrompt }
+        ],
+        max_tokens: 1000
       }),
     });
 
-    let extractedContent = '';
-    if (extractResp.ok) {
-      const extractData = await extractResp.json();
-      extractedContent = extractData.output?.[0]?.content?.[0]?.text
-        ?? extractData.output_text
-        ?? extractData.choices?.[0]?.message?.content
-        ?? '';
-    }
+    const extractData = await extractResp.json();
+    const extractedContent = extractData.choices[0].message.content;
 
     // Save history, update analysis job, and fetch remaining credits if user is authenticated
     let remainingCredits: number | null = null;
@@ -387,19 +339,18 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
     }
     // Mark job as failed if it was created
     try {
-      if (jobId) {
+      // @ts-ignore
+      if (typeof jobId !== 'undefined' && jobId) {
         await supabase
           .from('video_analyses')
-          .update({ status: 'failed', error: error instanceof Error ? error.message : 'failed' })
+          .update({ status: 'failed', error: (error as any)?.message || 'failed' })
           .eq('id', jobId);
       }
-    } catch (e) {
-      console.error('Failed to mark job as failed:', e);
-    }
+    } catch (_) {}
 
     return new Response(JSON.stringify({
       error: "Unexpected error",
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: (error as any)?.message || 'Unknown error'
     }), {
       status: 500,
       headers: {

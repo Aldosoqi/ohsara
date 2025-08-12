@@ -120,33 +120,28 @@ Finish with: "You can ask me anything about this video."` : `You are Ohsara Inte
           });
         }
       }
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openaiKey}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-5",
-        input: finalMessages.map((m) => ({
-          role: m.role,
-          content:
-            typeof m.content === "string"
-              ? [{ type: "text", text: m.content }]
-              : (m.content as Array<{ type: string; text?: string; image_url?: { url: string } }>),
-        })),
-        text: { format: { type: "text" }, verbosity: "medium" },
-        reasoning: { effort: "medium" },
-        tools: [],
-        store: true,
-      }),
+        model: "gpt-4.1-2025-04-14",
+        messages: finalMessages,
+        temperature: 0.2,
+        top_p: 0.9,
+        max_tokens: 1200,
+        presence_penalty: 0,
+        frequency_penalty: 1
+      })
     });
     if (!response.ok) {
       const text = await response.text();
       throw new Error(text || "OpenAI API error");
     }
     const data = await response.json();
-    const content = data?.output?.[0]?.content?.[0]?.text ?? "";
+    const content = data?.choices?.[0]?.message?.content ?? "";
     return new Response(JSON.stringify({
       content
     }), {
