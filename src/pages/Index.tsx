@@ -163,7 +163,7 @@ const Index = () => {
                         m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
                       }`}>
                         {m.role === 'assistant' && <Bot className="w-4 h-4 mt-1 opacity-70" />}
-                        <div dir="ltr" className="prose prose-sm max-w-none text-foreground">
+                        <div dir="ltr" className="prose prose-sm max-w-none">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                         </div>
                         {m.role === 'user' && <User className="w-4 h-4 mt-1 opacity-90" />}
