@@ -115,7 +115,7 @@ When referencing specific information, always include relevant timestamps in you
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5-2025-08-07',
+        model: 'gpt-5',
         messages: [
           systemMessage,
           { role: 'system', content: context },
