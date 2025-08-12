@@ -16,6 +16,8 @@ serve(async (req) => {
 
   let userId: string | null = null;
   let creditsDeducted = false;
+  // jobId is needed in both try and catch blocks
+  let jobId: string | null = null;
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -49,11 +51,12 @@ serve(async (req) => {
     // Check and deduct credits if user is authenticated
     if (userId) {
       // Ensure profile exists; grant default credits (5) to brand new users
-      let { data: profile, error: profileErr } = await supabase
+      const { data: profileData } = await supabase
         .from('profiles')
         .select('credits')
         .eq('user_id', userId)
-        .maybeSingle();
+        .maybeSingle<{ credits: number }>();
+      let profile = profileData;
 
       if (!profile) {
         // Insert minimal profile row; credits default is 5 per DB default
@@ -62,8 +65,8 @@ serve(async (req) => {
           .from('profiles')
           .select('credits')
           .eq('user_id', userId)
-          .single();
-        profile = prof as any;
+          .single<{ credits: number }>();
+        profile = prof;
       }
 
       if (!profile) {
@@ -106,7 +109,6 @@ serve(async (req) => {
     }
 
     // Create analysis job row to allow resuming after navigation
-    let jobId: string | null = null;
     if (userId) {
       try {
         const { data: job } = await supabase
@@ -115,7 +117,9 @@ serve(async (req) => {
           .select('id')
           .single();
         jobId = job?.id ?? null;
-      } catch (_) {}
+      } catch (e) {
+        console.error('Failed to create analysis job:', e);
+      }
     }
 
     const apifyToken = Deno.env.get('APIFY_API_TOKEN') || Deno.env.get('APIFY_API_KEY');
@@ -141,20 +145,33 @@ serve(async (req) => {
 
     const data = await apifyResp.json();
 
-    // Apify may return either the transcript array directly, or an object/array containing it
+    // Apify may return various shapes (array, object with `items`, etc.).
+    // Normalize to an array of items to simplify extraction.
+    const items = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.items)
+        ? data.items
+        : [data];
+
     let transcript: Array<{ start: string; dur?: string; text?: string }> = [];
-    if (Array.isArray(data)) {
-      if (data.length && (typeof data[0]?.start !== 'undefined' || typeof data[0]?.text !== 'undefined')) {
-        transcript = data as typeof transcript;
-      } else if (data[0]?.data && Array.isArray(data[0].data)) {
-        transcript = data[0].data;
-      } else if (data[0]?.transcript && Array.isArray(data[0].transcript)) {
-        transcript = data[0].transcript;
+    let item = items[0] ?? {};
+
+    for (const it of items) {
+      if (Array.isArray(it?.transcript)) {
+        transcript = it.transcript;
+        item = it;
+        break;
       }
-    } else if (data?.data && Array.isArray(data.data)) {
-      transcript = data.data;
-    } else if (data?.transcript && Array.isArray(data.transcript)) {
-      transcript = data.transcript;
+      if (Array.isArray(it?.data)) {
+        transcript = it.data;
+        item = it;
+        break;
+      }
+      if (Array.isArray(it) && it.length && (typeof it[0]?.start !== 'undefined' || typeof it[0]?.text !== 'undefined')) {
+        transcript = it as typeof transcript;
+        item = {};
+        break;
+      }
     }
 
     if (!transcript || !Array.isArray(transcript) || transcript.length === 0) {
@@ -162,7 +179,6 @@ serve(async (req) => {
     }
 
     // Try to get title/thumbnail from response, otherwise fallback later
-    const item = Array.isArray(data) ? data[0] : data;
 
     // Limit transcript length for prompt to avoid token overflows
     const MAX_LINES = 800;
@@ -229,8 +245,14 @@ serve(async (req) => {
       }),
     });
 
-    const openAIData = await openAIResp.json();
-    const analysis = openAIData.output?.[0]?.content?.[0]?.text;
+    let analysis = '';
+    if (openAIResp.ok) {
+      const openAIData = await openAIResp.json();
+      analysis = openAIData.output?.[0]?.content?.[0]?.text
+        ?? openAIData.output_text
+        ?? openAIData.choices?.[0]?.message?.content
+        ?? '';
+    }
 
     // Extract relevant transcript parts with timestamps
     const extractPrompt = `Viewer intent (from title/thumbnail analysis): "${analysis}"
@@ -266,8 +288,14 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
       }),
     });
 
-    const extractData = await extractResp.json();
-    const extractedContent = extractData.output?.[0]?.content?.[0]?.text;
+    let extractedContent = '';
+    if (extractResp.ok) {
+      const extractData = await extractResp.json();
+      extractedContent = extractData.output?.[0]?.content?.[0]?.text
+        ?? extractData.output_text
+        ?? extractData.choices?.[0]?.message?.content
+        ?? '';
+    }
 
     // Save history, update analysis job, and fetch remaining credits if user is authenticated
     let remainingCredits: number | null = null;
@@ -359,18 +387,19 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
     }
     // Mark job as failed if it was created
     try {
-      // @ts-ignore
-      if (typeof jobId !== 'undefined' && jobId) {
+      if (jobId) {
         await supabase
           .from('video_analyses')
-          .update({ status: 'failed', error: (error as any)?.message || 'failed' })
+          .update({ status: 'failed', error: error instanceof Error ? error.message : 'failed' })
           .eq('id', jobId);
       }
-    } catch (_) {}
+    } catch (e) {
+      console.error('Failed to mark job as failed:', e);
+    }
 
     return new Response(JSON.stringify({
       error: "Unexpected error",
-      details: (error as any)?.message || 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error'
     }), {
       status: 500,
       headers: {
