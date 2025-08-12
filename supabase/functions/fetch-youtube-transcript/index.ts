@@ -210,7 +210,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-2025-08-07',
         messages: [
           { role: 'system', content: `You are an expert at analyzing video content and user expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
           { role: 'user', content: userContent }
@@ -237,7 +237,7 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-2025-08-07',
         messages: [
           { role: 'system', content: `You are an expert at extracting relevant information from transcripts and providing concise answers to viewer expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
           { role: 'user', content: extractPrompt }

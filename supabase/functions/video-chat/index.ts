@@ -127,7 +127,7 @@ Finish with: "You can ask me anything about this video."` : `You are Ohsara Inte
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4.1-2025-04-14",
+        model: "gpt-5-2025-08-07",
         messages: finalMessages,
         temperature: 0.2,
         top_p: 0.9,
