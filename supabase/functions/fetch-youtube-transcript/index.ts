@@ -21,8 +21,9 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { url } = await req.json().catch(() => ({
-      url: undefined
+    const { url, responseLanguage } = await req.json().catch(() => ({
+      url: undefined,
+      responseLanguage: 'automatic'
     }));
 
     if (!url) {
@@ -47,13 +48,25 @@ serve(async (req) => {
 
     // Check and deduct credits if user is authenticated
     if (userId) {
-      const { data: profile, error: profileErr } = await supabase
+      // Ensure profile exists; grant default credits (5) to brand new users
+      let { data: profile, error: profileErr } = await supabase
         .from('profiles')
         .select('credits')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (profileErr || !profile) {
+      if (!profile) {
+        // Insert minimal profile row; credits default is 5 per DB default
+        await supabase.from('profiles').insert({ user_id: userId }).catch(() => {});
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('credits')
+          .eq('user_id', userId)
+          .single();
+        profile = prof as any;
+      }
+
+      if (!profile) {
         return new Response(JSON.stringify({ error: "Profile not found" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -90,6 +103,19 @@ serve(async (req) => {
       });
 
       creditsDeducted = true;
+    }
+
+    // Create analysis job row to allow resuming after navigation
+    let jobId: string | null = null;
+    if (userId) {
+      try {
+        const { data: job } = await supabase
+          .from('video_analyses')
+          .insert({ user_id: userId, youtube_url: url, status: 'processing' })
+          .select('id')
+          .single();
+        jobId = job?.id ?? null;
+      } catch (_) {}
     }
 
     const apifyToken = Deno.env.get('APIFY_API_TOKEN') || Deno.env.get('APIFY_API_KEY');
@@ -165,6 +191,9 @@ serve(async (req) => {
       throw new Error("Missing OpenAI API key");
     }
 
+    // Language preference handling
+    const languageInstruction = (responseLanguage && responseLanguage !== 'automatic') ? `Please respond in ${responseLanguage}.` : '';
+
     // Build multimodal user content including thumbnail image
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
       { type: 'text', text: 'Analyze this YouTube video title and thumbnail. Extract keywords from the title and describe notable visual properties on the thumbnail to infer what the viewer expects from this video.' },
@@ -183,7 +212,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are an expert at analyzing video content and user expectations.' },
+          { role: 'system', content: `You are an expert at analyzing video content and user expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
           { role: 'user', content: userContent }
         ],
         max_tokens: 500
@@ -210,7 +239,7 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are an expert at extracting relevant information from transcripts and providing concise answers to viewer expectations.' },
+          { role: 'system', content: `You are an expert at extracting relevant information from transcripts and providing concise answers to viewer expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
           { role: 'user', content: extractPrompt }
         ],
         max_tokens: 1000
@@ -220,7 +249,7 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
     const extractData = await extractResp.json();
     const extractedContent = extractData.choices[0].message.content;
 
-    // Save history and fetch remaining credits if user is authenticated
+    // Save history, update analysis job, and fetch remaining credits if user is authenticated
     let remainingCredits: number | null = null;
     if (userId) {
       try {
@@ -233,6 +262,25 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
         });
       } catch (e) {
         console.error('Failed to insert summary history:', e);
+      }
+
+      // Update analysis job with results
+      try {
+        if (typeof jobId !== 'undefined' && jobId) {
+          await supabase
+            .from('video_analyses')
+            .update({
+              title: title || null,
+              thumbnail: thumbnail || null,
+              analysis: analysis || null,
+              extracted_content: extractedContent || null,
+              transcript: transcript || null,
+              status: 'completed'
+            })
+            .eq('id', jobId);
+        }
+      } catch (e) {
+        console.error('Failed to update analysis job:', e);
       }
 
       try {
@@ -289,10 +337,20 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
         console.error('Failed to refund credits:', refundError);
       }
     }
+    // Mark job as failed if it was created
+    try {
+      // @ts-ignore
+      if (typeof jobId !== 'undefined' && jobId) {
+        await supabase
+          .from('video_analyses')
+          .update({ status: 'failed', error: (error as any)?.message || 'failed' })
+          .eq('id', jobId);
+      }
+    } catch (_) {}
 
     return new Response(JSON.stringify({
       error: "Unexpected error",
-      details: error.message
+      details: (error as any)?.message || 'Unknown error'
     }), {
       status: 500,
       headers: {

@@ -14,12 +14,19 @@ import { toast } from "@/hooks/use-toast";
 const Index = () => {
   const { user, loading, refreshProfile } = useAuth();
   const {
-    homepageWidgets
+    homepageWidgets,
+    responseLanguage,
   } = useSettings();
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
   const [step, setStep] = useState<"url" | "analyzing" | "ready">("url");
   const [isLoading, setIsLoading] = useState(false);
+  const [analyzingStageIndex, setAnalyzingStageIndex] = useState(0);
+  const analyzingStatuses = [
+    "Fetching the video...",
+    "Analyzing thumbnail and title...",
+    "All done!"
+  ];
   const [videoData, setVideoData] = useState<{
     title: string;
     thumbnail: string;
@@ -30,6 +37,7 @@ const Index = () => {
   type Msg = { role: "user" | "assistant"; content: string };
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
   const assistantStreamingRef = useRef<string>("");
   useEffect(() => {
     if (!loading && !user) {

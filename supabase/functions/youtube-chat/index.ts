@@ -19,7 +19,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { messages, extractedContent, fullTranscript } = await req.json();
+    const { messages, extractedContent, fullTranscript, responseLanguage } = await req.json();
 
     // Get auth user
     const authHeader = req.headers.get('Authorization');
@@ -30,13 +30,24 @@ serve(async (req) => {
 
     // Check and deduct credits if user is authenticated
     if (userId) {
-      const { data: profile, error: profileErr } = await supabase
+      let { data: profile } = await supabase
         .from('profiles')
         .select('credits')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (profileErr || !profile) {
+      if (!profile) {
+        // Create minimal profile; credits default to 5 per DB default
+        await supabase.from('profiles').insert({ user_id: userId }).catch(() => {});
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('credits')
+          .eq('user_id', userId)
+          .single();
+        profile = prof as any;
+      }
+
+      if (!profile) {
         return new Response(JSON.stringify({ error: "Profile not found" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -87,13 +98,14 @@ Key content addressing viewer expectations: ${extractedContent}
 Full transcript with timestamps for reference: ${fullTranscript?.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}
 `;
 
+    const languageInstruction = (responseLanguage && responseLanguage !== 'automatic') ? ` Please respond in ${responseLanguage}.` : '';
     const systemMessage = {
       role: 'system',
       content: `You are an AI assistant helping users understand YouTube video content. You have access to a summary of key content addressing the viewer's expectations and the full transcript with timestamps. 
 
 Focus primarily on the key content summary as it contains the most relevant information based on the user's expected needs from the video. Use the full transcript for additional context or to provide timestamps when needed.
 
-When referencing specific information, always include relevant timestamps in your response so users can jump to that part of the video.`
+When referencing specific information, always include relevant timestamps in your response so users can jump to that part of the video.${languageInstruction}`
     };
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

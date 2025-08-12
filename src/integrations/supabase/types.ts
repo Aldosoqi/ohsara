@@ -220,30 +220,56 @@ export type Database = {
         }
         Relationships: []
       }
+      video_analyses: {
+        Row: {
+          analysis: string | null
+          created_at: string
+          error: string | null
+          extracted_content: string | null
+          id: string
+          status: string
+          thumbnail: string | null
+          title: string | null
+          transcript: Json | null
+          updated_at: string
+          user_id: string
+          youtube_url: string
+        }
+        Insert: {
+          analysis?: string | null
+          created_at?: string
+          error?: string | null
+          extracted_content?: string | null
+          id?: string
+          status?: string
+          thumbnail?: string | null
+          title?: string | null
+          transcript?: Json | null
+          updated_at?: string
+          user_id: string
+          youtube_url: string
+        }
+        Update: {
+          analysis?: string | null
+          created_at?: string
+          error?: string | null
+          extracted_content?: string | null
+          id?: string
+          status?: string
+          thumbnail?: string | null
+          title?: string | null
+          transcript?: Json | null
+          updated_at?: string
+          user_id?: string
+          youtube_url?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      apply_user_credits: {
-        Args: {
-          user_id_param: string
-          credit_amount: number
-          transaction_type_param: string
-          description_param?: string
-          reference_id_param?: string
-        }
-        Returns: boolean
-      }
-      deduct_user_credits: {
-        Args: {
-          user_id_param: string
-          credit_amount: number
-          description_param?: string
-          reference_id_param?: string
-        }
-        Returns: boolean
-      }
       purchase_credit_pack: {
         Args: {
           user_id_param: string
@@ -259,24 +285,6 @@ export type Database = {
           description_param?: string
           reference_id_param?: string
         }
-        Returns: boolean
-      }
-      update_user_credits: {
-        Args:
-          | {
-              user_id_param: string
-              credit_amount: number
-              transaction_type_param: string
-              description_param?: string
-              reference_id_param?: string
-            }
-          | {
-              user_id_param: string
-              credit_amount: number
-              transaction_type_param: string
-              description_param?: string
-              reference_id_param?: string
-            }
         Returns: boolean
       }
     }
