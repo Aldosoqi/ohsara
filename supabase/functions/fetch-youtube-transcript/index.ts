@@ -203,7 +203,14 @@ serve(async (req) => {
       userContent.push({ type: 'image_url', image_url: { url: thumbnail } });
     }
 
-    const openAIResp = await fetch('https://api.openai.com/v1/chat/completions', {
+    const analysisMessages = [
+      {
+        role: 'system',
+        content: `You are an expert at analyzing video content and user expectations.${languageInstruction ? ' ' + languageInstruction : ''}`
+      },
+      { role: 'user', content: userContent }
+    ];
+    const openAIResp = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
@@ -211,16 +218,19 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: 'gpt-5',
-        messages: [
-          { role: 'system', content: `You are an expert at analyzing video content and user expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
-          { role: 'user', content: userContent }
-        ],
-        max_tokens: 500
+        input: analysisMessages.map((m) => ({
+          role: m.role,
+          content: typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content,
+        })),
+        text: { format: { type: 'text' }, verbosity: 'medium' },
+        reasoning: { effort: 'medium' },
+        tools: [],
+        store: true,
       }),
     });
 
     const openAIData = await openAIResp.json();
-    const analysis = openAIData.choices[0].message.content;
+    const analysis = openAIData.output?.[0]?.content?.[0]?.text;
 
     // Extract relevant transcript parts with timestamps
     const extractPrompt = `Viewer intent (from title/thumbnail analysis): "${analysis}"
@@ -230,7 +240,14 @@ Using the transcript below (each line has a start timestamp in seconds), produce
 Transcript:
 ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
 
-    const extractResp = await fetch('https://api.openai.com/v1/chat/completions', {
+    const extractMessages = [
+      {
+        role: 'system',
+        content: `You are an expert at extracting relevant information from transcripts and providing concise answers to viewer expectations.${languageInstruction ? ' ' + languageInstruction : ''}`
+      },
+      { role: 'user', content: extractPrompt }
+    ];
+    const extractResp = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
@@ -238,16 +255,19 @@ ${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
       },
       body: JSON.stringify({
         model: 'gpt-5',
-        messages: [
-          { role: 'system', content: `You are an expert at extracting relevant information from transcripts and providing concise answers to viewer expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
-          { role: 'user', content: extractPrompt }
-        ],
-        max_tokens: 1000
+        input: extractMessages.map((m) => ({
+          role: m.role,
+          content: typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content,
+        })),
+        text: { format: { type: 'text' }, verbosity: 'medium' },
+        reasoning: { effort: 'medium' },
+        tools: [],
+        store: true,
       }),
     });
 
     const extractData = await extractResp.json();
-    const extractedContent = extractData.choices[0].message.content;
+    const extractedContent = extractData.output?.[0]?.content?.[0]?.text;
 
     // Save history, update analysis job, and fetch remaining credits if user is authenticated
     let remainingCredits: number | null = null;
