@@ -154,9 +154,11 @@ const Index = () => {
                 🎬 Fetching transcript → 🔍 Analyzing video → ✂️ Preparing insights...
               </div>
               {streamingAnalysis && (
-                <div className="border rounded-lg p-4 bg-card">
-                  <h4 className="font-medium mb-2 text-primary">📊 Thumbnail & Title Insights</h4>
-                  <article dir="ltr" className="prose prose-sm max-w-none text-foreground">
+                <div className="border rounded-lg p-6 bg-card shadow-md">
+                  <h4 className="font-semibold mb-4 text-primary text-lg flex items-center gap-2">
+                    📊 Thumbnail & Title Insights
+                  </h4>
+                  <article dir="ltr" className="prose max-w-none">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingAnalysis}</ReactMarkdown>
                   </article>
                 </div>
@@ -178,49 +180,88 @@ const Index = () => {
                 </div>
               </div>
 
-              <div className="border rounded-lg p-4 bg-card">
-                <h4 className="font-medium mb-2 text-primary">📊 Thumbnail & Title Insights</h4>
-                <article dir="ltr" className="prose prose-sm max-w-none text-foreground">
+              <div className="border rounded-lg p-6 bg-card shadow-md">
+                <h4 className="font-semibold mb-4 text-primary text-lg flex items-center gap-2">
+                  📊 Thumbnail & Title Insights
+                </h4>
+                <article dir="ltr" className="prose max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{videoData.analysis}</ReactMarkdown>
                 </article>
               </div>
 
               {/* Chat Interface */}
-              <div className="border rounded-lg p-4 bg-muted/20">
-                <h4 className="font-medium mb-3 text-primary">💬 Chat for more details</h4>
-                <div className="space-y-3 max-h-[40vh] overflow-auto pr-2">
+              <div className="border rounded-lg p-6 bg-card shadow-md">
+                <h4 className="font-semibold mb-4 text-primary text-lg flex items-center gap-2">
+                  💬 Chat for more details
+                </h4>
+                
+                {/* Chat Messages */}
+                <div className="space-y-4 min-h-[200px] max-h-[60vh] overflow-auto mb-4 p-2">
+                  {messages.length === 0 && (
+                    <div className="text-center text-muted-foreground py-8">
+                      <p className="text-sm">Ask any question about the video content...</p>
+                    </div>
+                  )}
+                  
                   {messages.map((m, idx) => (
                     <div key={idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`flex items-start gap-3 max-w-[80%] rounded-2xl px-4 py-3 border ${
-                        m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                      <div className={`flex items-start gap-3 max-w-[85%] rounded-xl px-4 py-3 ${
+                        m.role === 'user' 
+                          ? 'bg-primary text-primary-foreground' 
+                          : 'bg-secondary border border-border'
                       }`}>
-                        {m.role === 'assistant' && <Bot className="w-4 h-4 mt-1 opacity-70" />}
-                        <div dir="ltr" className="prose prose-sm max-w-none text-foreground">
+                        {m.role === 'assistant' && <Bot className="w-5 h-5 mt-0.5 opacity-70 flex-shrink-0" />}
+                        <div className={`prose prose-sm max-w-none ${m.role === 'user' ? 'text-primary-foreground' : 'text-foreground'}`}>
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                         </div>
-                        {m.role === 'user' && <User className="w-4 h-4 mt-1 opacity-90" />}
+                        {m.role === 'user' && <User className="w-5 h-5 mt-0.5 opacity-90 flex-shrink-0" />}
                       </div>
                     </div>
                   ))}
+                  
                   {isChatLoading && streamingMessage && (
                     <div className="flex justify-start">
-                      <div className="flex items-start gap-3 max-w-[80%] rounded-2xl px-4 py-3 border bg-muted">
-                        <Bot className="w-4 h-4 mt-1 opacity-70" />
-                        <div dir="ltr" className="prose prose-sm max-w-none text-foreground">
+                      <div className="flex items-start gap-3 max-w-[85%] rounded-xl px-4 py-3 bg-secondary border border-border">
+                        <Bot className="w-5 h-5 mt-0.5 opacity-70 flex-shrink-0" />
+                        <div className="prose prose-sm max-w-none text-foreground">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingMessage}</ReactMarkdown>
                         </div>
                       </div>
                     </div>
                   )}
+                  
+                  {isChatLoading && !streamingMessage && (
+                    <div className="flex justify-start">
+                      <div className="flex items-start gap-3 max-w-[85%] rounded-xl px-4 py-3 bg-secondary border border-border">
+                        <Bot className="w-5 h-5 mt-0.5 opacity-70 flex-shrink-0" />
+                        <div className="text-muted-foreground text-sm">
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-current rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-current rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                            <div className="w-2 h-2 bg-current rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="mt-4 flex gap-2">
+                
+                {/* Chat Input */}
+                <div className="flex gap-3 border-t border-border pt-4">
                   <Textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder="Ask for more details, clarification, or deeper insights..."
-                    className="min-h-[50px] text-sm"
+                    className="min-h-[60px] resize-none text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        document.getElementById('send-button')?.click();
+                      }
+                    }}
                   />
                   <Button
+                    id="send-button"
                     onClick={async () => {
                       const content = input.trim();
                       if (!content) return;
@@ -290,8 +331,14 @@ const Index = () => {
                       }
                     }}
                     disabled={!input.trim() || isChatLoading}
-                    className="h-[50px] self-end px-6"
-                  >Send</Button>
+                    className="h-[60px] self-end px-6 min-w-[80px]"
+                  >
+                    {isChatLoading ? (
+                      <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      'Send'
+                    )}
+                  </Button>
                 </div>
               </div>
             </div>
