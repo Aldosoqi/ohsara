@@ -210,106 +210,77 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-2025-04-14',
         messages: [
           { role: 'system', content: `You are an expert at analyzing video content and user expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 500
+        max_tokens: 500,
+        stream: true
       }),
     });
 
-    const openAIData = await openAIResp.json();
-    const analysis = openAIData.choices[0].message.content;
-
-    // Extract relevant transcript parts with timestamps
-    const extractPrompt = `Viewer intent (from title/thumbnail analysis): "${analysis}"
-
-Using the transcript below (each line has a start timestamp in seconds), produce a well-structured Markdown answer with clear H1/H2/H3 headings. For each key point, include a bullet with the exact timestamp in [mm:ss] (or [hh:mm:ss]) format that the information appears. Do not invent timestamps; only use ones from the transcript. Keep the response left-to-right.
-
-Transcript:
-${transcriptForPrompt.map(t => `[${t.start}s] ${t.text || ''}`).join('\n')}`;
-
-    const extractResp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: `You are an expert at extracting relevant information from transcripts and providing concise answers to viewer expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
-          { role: 'user', content: extractPrompt }
-        ],
-        max_tokens: 1000
-      }),
-    });
-
-    const extractData = await extractResp.json();
-    const extractedContent = extractData.choices[0].message.content;
-
-    // Save history, update analysis job, and fetch remaining credits if user is authenticated
-    let remainingCredits: number | null = null;
-    if (userId) {
-      try {
-        await supabase.from('summaries').insert({
-          user_id: userId,
-          youtube_url: url,
-          video_title: title || null,
-          thumbnail_url: thumbnail || null,
-          summary: extractedContent || analysis || ''
-        });
-      } catch (e) {
-        console.error('Failed to insert summary history:', e);
-      }
-
-      // Update analysis job with results
-      try {
-        if (typeof jobId !== 'undefined' && jobId) {
-          await supabase
-            .from('video_analyses')
-            .update({
-              title: title || null,
-              thumbnail: thumbnail || null,
-              analysis: analysis || null,
-              extracted_content: extractedContent || null,
-              transcript: transcript || null,
-              status: 'completed'
-            })
-            .eq('id', jobId);
+    // Stream the analysis response
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const reader = openAIResp.body?.getReader();
+          if (!reader) throw new Error("No response stream");
+          
+          let analysis = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = new TextDecoder().decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+                
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content) {
+                    analysis += content;
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'analysis_chunk', content })}\n\n`));
+                  }
+                } catch (e) {
+                  // Skip invalid JSON
+                }
+              }
+            }
+          }
+          
+          // Send final analysis result
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+            type: 'analysis_complete', 
+            analysis,
+            title,
+            thumbnail,
+            fullTranscript: transcript
+          })}\n\n`));
+          
+          controller.close();
+        } catch (error) {
+          controller.error(error);
         }
-      } catch (e) {
-        console.error('Failed to update analysis job:', e);
       }
+    });
 
-      try {
-        const { data: profileAfter } = await supabase
-          .from('profiles')
-          .select('credits')
-          .eq('user_id', userId)
-          .maybeSingle<{ credits: number }>();
-        remainingCredits = profileAfter?.credits ?? null;
-      } catch (e) {
-        console.error('Failed to fetch remaining credits:', e);
-      }
-    }
-
-    return new Response(JSON.stringify({
-      title,
-      thumbnail,
-      analysis,
-      extractedContent,
-      fullTranscript: transcript,
-      creditsDeducted: userId ? 4 : 0,
-      remainingCredits,
-      raw: data
-    }), {
+    return new Response(stream, {
       headers: {
         ...corsHeaders,
-        "Content-Type": "application/json"
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
       }
     });
+
+    // The streaming response is already handled above
 
   } catch (error) {
     console.error("fetch-youtube-transcript error:", error);

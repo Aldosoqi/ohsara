@@ -31,14 +31,14 @@ const Index = () => {
     title: string;
     thumbnail: string;
     analysis: string;
-    extractedContent: string;
     fullTranscript: any[];
   } | null>(null);
+  const [streamingAnalysis, setStreamingAnalysis] = useState("");
   type Msg = { role: "user" | "assistant"; content: string };
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const assistantStreamingRef = useRef<string>("");
+  const [streamingMessage, setStreamingMessage] = useState("");
   useEffect(() => {
     if (!loading && !user) {
       navigate("/auth");
@@ -88,21 +88,50 @@ const Index = () => {
                         'Authorization': `Bearer ${accessToken}`,
                         'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
                       },
-                      body: JSON.stringify({ url })
+                      body: JSON.stringify({ url, responseLanguage })
                     });
-                    const data = await resp.json();
-                    if (!resp.ok) throw new Error(data?.error || 'Failed to process video');
 
-                    setVideoData({
-                      title: data.title,
-                      thumbnail: data.thumbnail,
-                      analysis: data.analysis,
-                      extractedContent: data.extractedContent,
-                      fullTranscript: data.fullTranscript
-                    });
-                    setStep("ready");
-                    toast({ title: "4 credits used", description: "Title & thumbnail analysis completed." });
-                    await refreshProfile();
+                    if (!resp.ok) throw new Error('Failed to process video');
+
+                    // Handle streaming response
+                    const reader = resp.body?.getReader();
+                    if (!reader) throw new Error('No response stream');
+
+                    setStreamingAnalysis("");
+                    
+                    while (true) {
+                      const { done, value } = await reader.read();
+                      if (done) break;
+                      
+                      const chunk = new TextDecoder().decode(value);
+                      const lines = chunk.split('\n');
+                      
+                      for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                          const data = line.slice(6);
+                          if (data === '[DONE]') continue;
+                          
+                          try {
+                            const parsed = JSON.parse(data);
+                            if (parsed.type === 'analysis_chunk') {
+                              setStreamingAnalysis(prev => prev + parsed.content);
+                            } else if (parsed.type === 'analysis_complete') {
+                              setVideoData({
+                                title: parsed.title,
+                                thumbnail: parsed.thumbnail,
+                                analysis: parsed.analysis,
+                                fullTranscript: parsed.fullTranscript
+                              });
+                              setStep("ready");
+                              toast({ title: "4 credits used", description: "Title & thumbnail analysis completed." });
+                              await refreshProfile();
+                            }
+                          } catch (e) {
+                            // Skip invalid JSON
+                          }
+                        }
+                      }
+                    }
                   } catch (e: any) {
                     console.error(e);
                     toast({ title: "Analysis failed", description: e?.message || "Please check your credits and try again.", variant: "destructive" });
@@ -120,8 +149,18 @@ const Index = () => {
           </div>
 
           {step === 'analyzing' && (
-            <div className="mt-6 text-sm text-muted-foreground animate-pulse">
-              🎬 Fetching transcript → 🔍 Analyzing video → ✂️ Preparing insights...
+            <div className="mt-6 space-y-4">
+              <div className="text-sm text-muted-foreground animate-pulse">
+                🎬 Fetching transcript → 🔍 Analyzing video → ✂️ Preparing insights...
+              </div>
+              {streamingAnalysis && (
+                <div className="border rounded-lg p-4 bg-card">
+                  <h4 className="font-medium mb-2 text-primary">📊 Thumbnail & Title Insights</h4>
+                  <article dir="ltr" className="prose prose-sm max-w-none text-foreground">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingAnalysis}</ReactMarkdown>
+                  </article>
+                </div>
+              )}
             </div>
           )}
 
@@ -140,16 +179,9 @@ const Index = () => {
               </div>
 
               <div className="border rounded-lg p-4 bg-card">
-                <h4 className="font-medium mb-2 text-primary">📊 Video analysis</h4>
+                <h4 className="font-medium mb-2 text-primary">📊 Thumbnail & Title Insights</h4>
                 <article dir="ltr" className="prose prose-sm max-w-none text-foreground">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{videoData.analysis}</ReactMarkdown>
-                </article>
-              </div>
-
-              <div className="border rounded-lg p-4">
-                <h4 className="font-medium mb-3 text-primary">📝 Extracted Key Content</h4>
-                <article dir="ltr" className="prose prose-sm max-w-none text-foreground">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{videoData.extractedContent}</ReactMarkdown>
                 </article>
               </div>
 
@@ -163,13 +195,23 @@ const Index = () => {
                         m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
                       }`}>
                         {m.role === 'assistant' && <Bot className="w-4 h-4 mt-1 opacity-70" />}
-                        <div dir="ltr" className="prose prose-sm max-w-none">
+                        <div dir="ltr" className="prose prose-sm max-w-none text-foreground">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                         </div>
                         {m.role === 'user' && <User className="w-4 h-4 mt-1 opacity-90" />}
                       </div>
                     </div>
                   ))}
+                  {isChatLoading && streamingMessage && (
+                    <div className="flex justify-start">
+                      <div className="flex items-start gap-3 max-w-[80%] rounded-2xl px-4 py-3 border bg-muted">
+                        <Bot className="w-4 h-4 mt-1 opacity-70" />
+                        <div dir="ltr" className="prose prose-sm max-w-none text-foreground">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingMessage}</ReactMarkdown>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-4 flex gap-2">
                   <Textarea
@@ -185,6 +227,9 @@ const Index = () => {
                       const newMsgs = [...messages, { role: 'user' as const, content }];
                       setMessages(newMsgs);
                       setInput("");
+                      setIsChatLoading(true);
+                      setStreamingMessage("");
+                      
                       try {
                         const { data: { session } } = await supabase.auth.getSession();
                         const accessToken = session?.access_token;
@@ -196,22 +241,55 @@ const Index = () => {
                             'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inprb2t0d2pybW12bXdpZnR4eG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxNDk5OTQsImV4cCI6MjA2OTcyNTk5NH0.szbLke0RzFR-jdzUB9jrXmUPM2jsYWMrieCRwmRA0Fg'
                           },
                           body: JSON.stringify({
-                            extractedContent: videoData.extractedContent,
                             fullTranscript: videoData.fullTranscript,
-                            messages: newMsgs
+                            messages: newMsgs,
+                            responseLanguage
                           })
                         });
-                        const data = await resp.json();
-                        const reply = data?.content || 'No response available';
-                        setMessages((cur) => [...cur, { role: 'assistant', content: reply }]);
-                        toast({ title: "0.5 credit used", description: "Chat message processed." });
-                        await refreshProfile();
+
+                        if (!resp.ok) throw new Error('Chat request failed');
+
+                        // Handle streaming response
+                        const reader = resp.body?.getReader();
+                        if (!reader) throw new Error('No response stream');
+                        
+                        while (true) {
+                          const { done, value } = await reader.read();
+                          if (done) break;
+                          
+                          const chunk = new TextDecoder().decode(value);
+                          const lines = chunk.split('\n');
+                          
+                          for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                              const data = line.slice(6);
+                              if (data === '[DONE]') continue;
+                              
+                              try {
+                                const parsed = JSON.parse(data);
+                                if (parsed.type === 'chat_chunk') {
+                                  setStreamingMessage(prev => prev + parsed.content);
+                                } else if (parsed.type === 'chat_complete') {
+                                  setMessages((cur) => [...cur, { role: 'assistant', content: parsed.reply }]);
+                                  setStreamingMessage("");
+                                  setIsChatLoading(false);
+                                  toast({ title: "0.5 credit used", description: "Chat message processed." });
+                                  await refreshProfile();
+                                }
+                              } catch (e) {
+                                // Skip invalid JSON
+                              }
+                            }
+                          }
+                        }
                       } catch (e) {
                         console.error(e);
                         setMessages((cur) => [...cur, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }]);
+                        setIsChatLoading(false);
+                        setStreamingMessage("");
                       }
                     }}
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || isChatLoading}
                     className="h-[50px] self-end px-6"
                   >Send</Button>
                 </div>

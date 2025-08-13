@@ -115,32 +115,87 @@ When referencing specific information, always include relevant timestamps in you
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-2025-04-14',
         messages: [
           systemMessage,
           { role: 'system', content: context },
           ...messages
         ],
-        max_tokens: 500
+        max_tokens: 500,
+        stream: true
       }),
     });
 
-    const data = await response.json();
-    const reply = data.choices[0].message.content;
-
-    let remainingCredits: number | null = null;
-    if (userId) {
-      const { data: profileAfter } = await supabase
-        .from('profiles')
-        .select('credits')
-        .eq('user_id', userId)
-        .maybeSingle<{ credits: number }>();
-      remainingCredits = profileAfter?.credits ?? null;
-    }
-
-    return new Response(JSON.stringify({ content: reply, creditsDeducted: userId ? 0.5 : 0, remainingCredits }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // Stream the chat response
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const reader = response.body?.getReader();
+          if (!reader) throw new Error("No response stream");
+          
+          let reply = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = new TextDecoder().decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+                
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content) {
+                    reply += content;
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chat_chunk', content })}\n\n`));
+                  }
+                } catch (e) {
+                  // Skip invalid JSON
+                }
+              }
+            }
+          }
+          
+          // Get remaining credits
+          let remainingCredits: number | null = null;
+          if (userId) {
+            const { data: profileAfter } = await supabase
+              .from('profiles')
+              .select('credits')
+              .eq('user_id', userId)
+              .maybeSingle<{ credits: number }>();
+            remainingCredits = profileAfter?.credits ?? null;
+          }
+          
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+            type: 'chat_complete', 
+            reply,
+            creditsDeducted: userId ? 0.5 : 0,
+            remainingCredits 
+          })}\n\n`));
+          
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
+      }
     });
+
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      }
+    });
+
+    // The streaming response is already handled above
 
   } catch (error) {
     console.error('Error in youtube-chat function:', error);
