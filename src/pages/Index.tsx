@@ -128,12 +128,30 @@ const Index = () => {
                               setStreamingAnalysis(prev => prev + parsed.content);
                             } else if (parsed.type === 'analysis_complete') {
                               console.log('🎬 Analysis complete! Setting video data and changing to ready state');
-                              setVideoData({
+                              const videoDataObj = {
                                 title: parsed.title,
                                 thumbnail: parsed.thumbnail,
                                 analysis: parsed.analysis,
                                 fullTranscript: parsed.fullTranscript
-                              });
+                              };
+                              setVideoData(videoDataObj);
+                              
+                              // Save to summaries table for history
+                              try {
+                                const { data: { session } } = await supabase.auth.getSession();
+                                if (session?.user?.id) {
+                                  await supabase.from('summaries').insert({
+                                    user_id: session.user.id,
+                                    youtube_url: url,
+                                    video_title: parsed.title,
+                                    thumbnail_url: parsed.thumbnail,
+                                    summary: parsed.analysis
+                                  });
+                                }
+                              } catch (error) {
+                                console.error('Error saving to history:', error);
+                              }
+                              
                               setStep("ready");
                               toast({ title: "4 credits used", description: "Title & thumbnail analysis completed." });
                               await refreshProfile();
