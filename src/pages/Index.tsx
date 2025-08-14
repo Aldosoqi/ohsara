@@ -11,6 +11,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Bot, User } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+
+// Helper function to format Q&A text with bold questions
+const formatQAText = (text: string) => {
+  return text.replace(/^Q: /gm, "**Q:** ").replace(/\nQ: /g, "\n**Q:** ");
+};
 const Index = () => {
   const { user, loading, refreshProfile } = useAuth();
   const {
@@ -166,7 +171,7 @@ const Index = () => {
                     📊 Thumbnail & Title Insights
                   </h4>
                   <article dir="ltr" className="prose max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingAnalysis}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{formatQAText(streamingAnalysis)}</ReactMarkdown>
                   </article>
                 </div>
               )}
@@ -192,7 +197,7 @@ const Index = () => {
                   📊 Thumbnail & Title Insights
                 </h4>
                 <article dir="ltr" className="prose max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{videoData.analysis}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{formatQAText(videoData.analysis)}</ReactMarkdown>
                 </article>
               </div>
 
@@ -219,7 +224,7 @@ const Index = () => {
                       }`}>
                         {m.role === 'assistant' && <Bot className="w-5 h-5 mt-0.5 opacity-70 flex-shrink-0" />}
                         <div className={`prose prose-sm max-w-none ${m.role === 'user' ? 'text-primary-foreground' : 'text-foreground'}`}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{formatQAText(m.content)}</ReactMarkdown>
                         </div>
                         {m.role === 'user' && <User className="w-5 h-5 mt-0.5 opacity-90 flex-shrink-0" />}
                       </div>
@@ -231,7 +236,7 @@ const Index = () => {
                       <div className="flex items-start gap-3 max-w-[85%] rounded-xl px-4 py-3 bg-secondary border border-border">
                         <Bot className="w-5 h-5 mt-0.5 opacity-70 flex-shrink-0" />
                         <div className="prose prose-sm max-w-none text-foreground">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingMessage}</ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{formatQAText(streamingMessage)}</ReactMarkdown>
                         </div>
                       </div>
                     </div>
