@@ -98,10 +98,14 @@ const Index = () => {
                     if (!reader) throw new Error('No response stream');
 
                     setStreamingAnalysis("");
+                    console.log('🎬 Starting to read analysis stream...');
                     
                     while (true) {
                       const { done, value } = await reader.read();
-                      if (done) break;
+                      if (done) {
+                        console.log('🎬 Stream reading completed');
+                        break;
+                      }
                       
                       const chunk = new TextDecoder().decode(value);
                       const lines = chunk.split('\n');
@@ -113,9 +117,11 @@ const Index = () => {
                           
                           try {
                             const parsed = JSON.parse(data);
+                            console.log('🎬 Received streaming data:', parsed.type);
                             if (parsed.type === 'analysis_chunk') {
                               setStreamingAnalysis(prev => prev + parsed.content);
                             } else if (parsed.type === 'analysis_complete') {
+                              console.log('🎬 Analysis complete! Setting video data and changing to ready state');
                               setVideoData({
                                 title: parsed.title,
                                 thumbnail: parsed.thumbnail,
@@ -127,16 +133,17 @@ const Index = () => {
                               await refreshProfile();
                             }
                           } catch (e) {
-                            // Skip invalid JSON
+                            console.error('🎬 Failed to parse streaming data:', e);
                           }
                         }
                       }
                     }
                   } catch (e: any) {
-                    console.error(e);
+                    console.error('🎬 Analysis error:', e);
                     toast({ title: "Analysis failed", description: e?.message || "Please check your credits and try again.", variant: "destructive" });
                     setStep("url");
                   } finally {
+                    console.log('🎬 Analysis process finished, current step:', step);
                     setIsLoading(false);
                   }
                 }}
