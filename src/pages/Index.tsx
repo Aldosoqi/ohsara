@@ -40,6 +40,25 @@ const Index = () => {
     fullTranscript: any[];
   } | null>(null);
   const [streamingAnalysis, setStreamingAnalysis] = useState("");
+  const analysisQueueRef = useRef<string[]>([]);
+  const analysisProcessingRef = useRef(false);
+
+  const processAnalysisQueue = () => {
+    if (analysisProcessingRef.current) return;
+    analysisProcessingRef.current = true;
+
+    const process = () => {
+      const next = analysisQueueRef.current.shift();
+      if (next !== undefined) {
+        setStreamingAnalysis((prev) => prev + next);
+        setTimeout(process, 35);
+      } else {
+        analysisProcessingRef.current = false;
+      }
+    };
+
+    process();
+  };
   type Msg = { role: "user" | "assistant"; content: string };
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -103,6 +122,8 @@ const Index = () => {
                     const reader = resp.body?.getReader();
                     if (!reader) throw new Error('No response stream');
 
+                    analysisQueueRef.current = [];
+                    analysisProcessingRef.current = false;
                     setStreamingAnalysis("");
                     console.log('🎬 Starting to read analysis stream...');
                     
@@ -125,7 +146,8 @@ const Index = () => {
                             const parsed = JSON.parse(data);
                             console.log('🎬 Received streaming data:', parsed.type);
                             if (parsed.type === 'analysis_chunk') {
-                              setStreamingAnalysis(prev => prev + parsed.content);
+                              analysisQueueRef.current.push(...parsed.content.split(/(\s+)/));
+                              processAnalysisQueue();
                             } else if (parsed.type === 'analysis_complete') {
                               console.log('🎬 Analysis complete! Setting video data and changing to ready state');
                               setVideoData({
