@@ -14,7 +14,8 @@ import { toast } from "@/hooks/use-toast";
 
 // Helper function to format Q&A text with bold questions
 const formatQAText = (text: string) => {
-  return text.replace(/^Q: /gm, "**Q:** ").replace(/\nQ: /g, "\n**Q:** ");
+  // Bold entire question from Q: until A: or end of line
+  return text.replace(/Q: ([^A]*?)(?=A:|$)/gm, "**Q: $1**");
 };
 const Index = () => {
   const { user, loading, refreshProfile } = useAuth();
