@@ -20,7 +20,7 @@ export function YouTubeInput() {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [finalResult, setFinalResult] = useState("");
-  const [videoMetadata, setVideoMetadata] = useState<any>(null);
+  const [videoMetadata, setVideoMetadata] = useState<{ title?: string; thumbnail?: string } | null>(null);
   const [error, setError] = useState("");
   const [currentSummaryId, setCurrentSummaryId] = useState<string | null>(null);
   const [pageVisible, setPageVisible] = useState(true);
@@ -33,6 +33,24 @@ export function YouTubeInput() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
+
+  // Poll for summary completion when processing happens in background
+  const pollSummary = (id: string) => {
+    const interval = setInterval(async () => {
+      const { data } = await supabase.from('summaries')
+        .select('summary, video_title, thumbnail_url')
+        .eq('id', id)
+        .single();
+      if (data?.summary && data.summary !== '' && data.summary !== 'Processing...') {
+        clearInterval(interval);
+        setFinalResult(data.summary);
+        setVideoMetadata({ title: data.video_title, thumbnail: data.thumbnail_url });
+        setStep('results');
+        setIsLoading(false);
+        localStorage.removeItem('processingSummaryId');
+      }
+    }, 5000);
+  };
 
   // Clean up old incomplete summaries on mount
   useEffect(() => {
@@ -67,6 +85,16 @@ export function YouTubeInput() {
       }
     };
     checkExistingRequests();
+  }, []);
+
+  // Resume polling for summaries that were processing before a refresh
+  useEffect(() => {
+    const pendingId = localStorage.getItem('processingSummaryId');
+    if (pendingId) {
+      setCurrentSummaryId(pendingId);
+      setStep('processing');
+      pollSummary(pendingId);
+    }
   }, []);
   const handleRequestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,6 +134,8 @@ export function YouTubeInput() {
         throw new Error('Failed to create summary record');
       }
       setCurrentSummaryId(newSummary.id);
+      localStorage.setItem('processingSummaryId', newSummary.id);
+      pollSummary(newSummary.id);
       const streamResponse = await fetch(`https://zkoktwjrmmvmwiftxxmf.supabase.co/functions/v1/process-youtube`, {
         method: 'POST',
         headers: {
@@ -169,6 +199,7 @@ export function YouTubeInput() {
       setFinalResult(result);
       setStep("results");
       setIsLoading(false);
+      localStorage.removeItem('processingSummaryId');
 
       // Show notification if user left the page during processing
       if (!pageVisible && requestNotifications) {
@@ -185,6 +216,7 @@ export function YouTubeInput() {
           console.error('Failed to clean up summary:', cleanupError);
         }
       }
+      localStorage.removeItem('processingSummaryId');
 
       // Show appropriate error message based on the error
       if (error.message === 'Failed to create summary record') {
