@@ -51,9 +51,34 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Profile not found" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      if ((profile.credits as number) < 0.5) {
+      // Determine content length category for credit calculation
+      const contentLength = fullTranscript?.length || 0;
+      let contentCategory = 'micro';
+      let requiredCredits = 1;
+
+      if (contentLength > 2000) {
+        contentCategory = 'marathon';
+        requiredCredits = 8;
+      } else if (contentLength > 1200) {
+        contentCategory = 'extended';
+        requiredCredits = 6;
+      } else if (contentLength > 800) {
+        contentCategory = 'long';
+        requiredCredits = 4;
+      } else if (contentLength > 400) {
+        contentCategory = 'medium';
+        requiredCredits = 3;
+      } else if (contentLength > 100) {
+        contentCategory = 'short';
+        requiredCredits = 2;
+      }
+
+      // Use 10% of analysis credits for chat (minimum 0.5)
+      const chatCredits = Math.max(0.5, requiredCredits * 0.1);
+
+      if ((profile.credits as number) < chatCredits) {
         return new Response(JSON.stringify({
-          error: "Insufficient credits. Need 0.5 credits for chat message."
+          error: `Insufficient credits. Need ${chatCredits} credits for chat message.`
         }), {
           status: 402,
           headers: {
@@ -65,7 +90,7 @@ serve(async (req) => {
 
       const { error: updErr } = await supabase
         .from('profiles')
-        .update({ credits: (profile.credits as number) - 0.5 })
+        .update({ credits: (profile.credits as number) - chatCredits })
         .eq('user_id', userId);
 
       if (updErr) {
@@ -78,9 +103,9 @@ serve(async (req) => {
       // best-effort transaction log
       await supabase.from('credit_transactions').insert({
         user_id: userId,
-        amount: -0.5,
+        amount: -chatCredits,
         transaction_type: 'chat',
-        description: 'YouTube chat message'
+        description: `YouTube chat message (${contentCategory}: ${contentLength} segments)`
       });
 
       creditsDeducted = true;
@@ -172,10 +197,24 @@ When referencing specific information, always include relevant timestamps in you
             remainingCredits = profileAfter?.credits ?? null;
           }
           
+          // Calculate actual credits deducted based on content length
+          let actualCreditsDeducted = 0;
+          if (userId) {
+            const contentLength = fullTranscript?.length || 0;
+            let requiredCredits = 1;
+            if (contentLength > 2000) requiredCredits = 8;
+            else if (contentLength > 1200) requiredCredits = 6;
+            else if (contentLength > 800) requiredCredits = 4;
+            else if (contentLength > 400) requiredCredits = 3;
+            else if (contentLength > 100) requiredCredits = 2;
+            
+            actualCreditsDeducted = Math.max(0.5, requiredCredits * 0.1);
+          }
+
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
             type: 'chat_complete', 
             reply,
-            creditsDeducted: userId ? 0.5 : 0,
+            creditsDeducted: actualCreditsDeducted,
             remainingCredits 
           })}\n\n`));
           
@@ -208,13 +247,24 @@ When referencing specific information, always include relevant timestamps in you
           .eq('user_id', userId)
           .single();
         if (!profErr && profileAfter) {
+          // Calculate refund amount based on what was actually deducted
+          const contentLength = fullTranscript?.length || 0;
+          let requiredCredits = 1;
+          if (contentLength > 2000) requiredCredits = 8;
+          else if (contentLength > 1200) requiredCredits = 6;
+          else if (contentLength > 800) requiredCredits = 4;
+          else if (contentLength > 400) requiredCredits = 3;
+          else if (contentLength > 100) requiredCredits = 2;
+          
+          const refundAmount = Math.max(0.5, requiredCredits * 0.1);
+          
           await supabase
             .from('profiles')
-            .update({ credits: (profileAfter.credits as number) + 0.5 })
+            .update({ credits: (profileAfter.credits as number) + refundAmount })
             .eq('user_id', userId);
           await supabase.from('credit_transactions').insert({
             user_id: userId,
-            amount: 0.5,
+            amount: refundAmount,
             transaction_type: 'refund',
             description: 'Chat message refund'
           });

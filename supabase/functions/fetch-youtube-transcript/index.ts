@@ -46,7 +46,7 @@ serve(async (req) => {
       userId = user?.id || null;
     }
 
-    // Check and deduct credits if user is authenticated
+    // Check and deduct credits if user is authenticated (initial minimal deduction)
     if (userId) {
       // Ensure profile exists; grant default credits (5) to brand new users
       let { data: profile, error: profileErr } = await supabase
@@ -70,9 +70,9 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Profile not found" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      if ((profile.credits as number) < 4) {
+      if ((profile.credits as number) < 1) {
         return new Response(JSON.stringify({
-          error: "Insufficient credits. Need 4 credits for analysis."
+          error: "Insufficient credits. Need at least 1 credit for analysis."
         }), {
           status: 402,
           headers: {
@@ -82,9 +82,10 @@ serve(async (req) => {
         });
       }
 
+      // Initial deduction of 1 credit, will adjust based on content length later
       const { error: updErr } = await supabase
         .from('profiles')
-        .update({ credits: (profile.credits as number) - 4 })
+        .update({ credits: (profile.credits as number) - 1 })
         .eq('user_id', userId);
 
       if (updErr) {
@@ -93,14 +94,6 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-
-      // best-effort transaction log
-      await supabase.from('credit_transactions').insert({
-        user_id: userId,
-        amount: -4,
-        transaction_type: 'analysis',
-        description: 'YouTube title & thumbnail recognition'
-      });
 
       creditsDeducted = true;
     }
@@ -255,13 +248,77 @@ serve(async (req) => {
             }
           }
           
+          // Determine content length and calculate credit adjustment
+          const contentLength = transcript.length;
+          let contentCategory = 'micro';
+          let requiredCredits = 1;
+
+          if (contentLength > 2000) {
+            contentCategory = 'marathon';
+            requiredCredits = 8;
+          } else if (contentLength > 1200) {
+            contentCategory = 'extended';
+            requiredCredits = 6;
+          } else if (contentLength > 800) {
+            contentCategory = 'long';
+            requiredCredits = 4;
+          } else if (contentLength > 400) {
+            contentCategory = 'medium';
+            requiredCredits = 3;
+          } else if (contentLength > 100) {
+            contentCategory = 'short';
+            requiredCredits = 2;
+          }
+
+          // Adjust credits based on actual content length
+          if (userId && creditsDeducted) {
+            const additionalCredits = requiredCredits - 1; // We already deducted 1 credit
+            if (additionalCredits > 0) {
+              // Check if user has enough credits for the adjustment
+              const { data: currentProfile } = await supabase
+                .from('profiles')
+                .select('credits')
+                .eq('user_id', userId)
+                .single();
+              
+              if (currentProfile && (currentProfile.credits as number) >= additionalCredits) {
+                // Deduct additional credits
+                await supabase
+                  .from('profiles')
+                  .update({ credits: (currentProfile.credits as number) - additionalCredits })
+                  .eq('user_id', userId);
+                
+                // Log the adjustment
+                await supabase.from('credit_transactions').insert({
+                  user_id: userId,
+                  amount: -additionalCredits,
+                  transaction_type: 'analysis_adjustment',
+                  description: `Content length adjustment (${contentCategory}: ${contentLength} segments)`
+                });
+              } else {
+                // Not enough credits for full analysis, but continue with partial
+                console.log(`User ${userId} doesn't have enough credits for ${contentCategory} analysis, continuing with partial`);
+              }
+            }
+
+            // Log the initial transaction with final details
+            await supabase.from('credit_transactions').insert({
+              user_id: userId,
+              amount: -1,
+              transaction_type: 'analysis',
+              description: `YouTube analysis (${contentCategory}: ${contentLength} segments)`
+            });
+          }
+
           // Send final analysis result
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
             type: 'analysis_complete', 
             analysis,
             title,
             thumbnail,
-            fullTranscript: transcript
+            fullTranscript: transcript,
+            contentCategory,
+            creditsUsed: requiredCredits
           })}\n\n`));
           
           controller.close();
@@ -295,11 +352,11 @@ serve(async (req) => {
         if (!profErr && profileAfter) {
           await supabase
             .from('profiles')
-            .update({ credits: (profileAfter.credits as number) + 4 })
+            .update({ credits: (profileAfter.credits as number) + 1 })
             .eq('user_id', userId);
           await supabase.from('credit_transactions').insert({
             user_id: userId,
-            amount: 4,
+            amount: 1,
             transaction_type: 'refund',
             description: 'Analysis failed - refund'
           });
