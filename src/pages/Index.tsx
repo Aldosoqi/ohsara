@@ -139,7 +139,7 @@ const Index = () => {
                       
                       for (const line of lines) {
                         if (line.startsWith('data: ')) {
-                          const data = line.slice(6);
+                          const data = line.slice(6).trim();
                           if (data === '[DONE]') continue;
                           
                           try {
@@ -338,7 +338,7 @@ const Index = () => {
                           
                           for (const line of lines) {
                             if (line.startsWith('data: ')) {
-                              const data = line.slice(6);
+                              const data = line.slice(6).trim();
                               if (data === '[DONE]') continue;
                               
                               try {
