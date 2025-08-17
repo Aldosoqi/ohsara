@@ -203,12 +203,28 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-2025-04-14',
+        model: 'gpt-5-2025-08-07',
         messages: [
-          { role: 'system', content: `You are an expert at analyzing video content and user expectations.${languageInstruction ? ' ' + languageInstruction : ''}` },
+          { 
+            role: 'system', 
+            content: `You are a multimodal Video Understanding Assistant. Analyze the video's title, thumbnail, and transcript to understand the content and infer user intent. Respond in a structured Q/A format.
+
+${responseLanguage === 'arabic' ? 'Respond entirely in Modern Standard Arabic using س: for questions and ج: for answers.' : 'Respond entirely in English using Q: for questions and A: for answers.'}
+
+Format your response with these sections:
+- Start with an italicized intent guess about what the user likely needs
+- س: ما هو هذا الفيديو؟ / Q: What is this video about?
+- س: من هو الجمهور المستهدف وما المتطلبات المسبقة؟ / Q: Who is it for and what prerequisites are needed?
+- س: ما هي الخطوات أو النقاط الرئيسية؟ / Q: What are the key steps/main points? (include timestamps like [12:34])
+- س: ما الأدوات/الموارد المذكورة؟ / Q: What tools/resources are mentioned?
+- س: ما التحذيرات أو المخاطر؟ / Q: Any caveats, pitfalls, or contradictions?
+- End with "الخطوات التالية:" / "Next Steps:" followed by 3-6 actionable bullet points
+
+Be concise, factual, and actionable. Include timestamps when referencing specific content.` 
+          },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 500,
+        max_completion_tokens: 500,
         stream: true
       }),
     });

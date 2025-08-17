@@ -22,6 +22,7 @@ const Index = () => {
   const {
     homepageWidgets,
     responseLanguage,
+    setResponseLanguage,
   } = useSettings();
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
@@ -86,7 +87,24 @@ const Index = () => {
         <div className="text-center space-y-8">
           <h1 className="ohsara-logo text-6xl font-bold">Ohsara</h1>
           <div className="space-y-4">
-            <label className="text-lg font-medium">Paste YouTube URL</label>
+            <div className="flex items-center justify-center gap-4 mb-4">
+              <label className="text-lg font-medium">Paste YouTube URL</label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Language:</span>
+                <select 
+                  value={responseLanguage}
+                  onChange={(e) => {
+                    const newLang = e.target.value as 'english' | 'arabic';
+                    // Update settings if needed
+                    setResponseLanguage?.(newLang);
+                  }}
+                  className="text-sm border rounded px-2 py-1 bg-background"
+                >
+                  <option value="english">English</option>
+                  <option value="arabic">العربية</option>
+                </select>
+              </div>
+            </div>
             <div className="relative max-w-2xl mx-auto">
               <Input
                 type="url"
