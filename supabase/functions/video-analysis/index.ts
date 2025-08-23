@@ -21,6 +21,14 @@ interface QAPair {
   category: string;
   importance: number;
   timestamp?: string;
+  chunkIndex?: number;
+}
+
+interface ContentChunk {
+  text: string;
+  startIndex: number;
+  endIndex: number;
+  chunkNumber: number;
 }
 
 const corsHeaders = {
@@ -172,8 +180,10 @@ async function getVideoMetadata(videoId: string): Promise<VideoMetadata> {
   }
 }
 
-function getSystemPrompt(analysisType: string): string {
+function getSystemPrompt(analysisType: string, isChunked: boolean = false, chunkInfo?: string): string {
   const basePrompt = `You are a video content analysis expert. Your task is to analyze video transcripts and generate helpful Q&A pairs.
+
+${isChunked ? `NOTE: This is part of a larger transcript. ${chunkInfo || ''} Focus on the content in this section while being aware it's part of a larger whole.` : ''}
 
 Return your response as a JSON array of objects with this structure:
 {
@@ -189,67 +199,116 @@ Return your response as a JSON array of objects with this structure:
       return `${basePrompt}
 
 Analysis Type: COMPREHENSIVE
-- Extract every significant piece of information
+- Extract every significant piece of information from this ${isChunked ? 'section' : 'transcript'}
 - Cover main topics, subtopics, examples, and details
 - Include background context and explanations
-- Generate 8-15 Q&A pairs
+- Generate ${isChunked ? '4-8' : '8-15'} Q&A pairs
 - Categories: main-topic, detail, example, context, conclusion`;
 
     case 'key-points':
       return `${basePrompt}
 
 Analysis Type: KEY POINTS
-- Focus on the most important and actionable information
+- Focus on the most important and actionable information in this ${isChunked ? 'section' : 'transcript'}
 - Prioritize takeaways and practical insights
 - Skip minor details and tangents
-- Generate 5-8 Q&A pairs
+- Generate ${isChunked ? '3-5' : '5-8'} Q&A pairs
 - Categories: key-point, takeaway, action-item, insight`;
 
     case 'academic':
       return `${basePrompt}
 
 Analysis Type: ACADEMIC
-- Extract definitions, theories, and research findings
+- Extract definitions, theories, and research findings from this ${isChunked ? 'section' : 'transcript'}
 - Focus on educational content and learning objectives
 - Include methodologies and evidence presented
-- Generate 6-12 Q&A pairs
+- Generate ${isChunked ? '3-6' : '6-12'} Q&A pairs
 - Categories: definition, theory, research, methodology, evidence`;
 
     case 'tutorial':
       return `${basePrompt}
 
 Analysis Type: TUTORIAL
-- Focus on step-by-step instructions and procedures
+- Focus on step-by-step instructions and procedures in this ${isChunked ? 'section' : 'transcript'}
 - Extract tools, prerequisites, and requirements
 - Include troubleshooting and common mistakes
-- Generate 6-10 Q&A pairs
+- Generate ${isChunked ? '3-5' : '6-10'} Q&A pairs
 - Categories: step, tool, prerequisite, troubleshooting, tip`;
 
     default:
       return `${basePrompt}
 
 Analysis Type: STANDARD
-- Balance between detail and key points
+- Balance between detail and key points in this ${isChunked ? 'section' : 'transcript'}
 - Extract main topics and important details
-- Generate 6-10 Q&A pairs
+- Generate ${isChunked ? '3-5' : '6-10'} Q&A pairs
 - Categories: main-topic, detail, insight, conclusion`;
   }
 }
 
-async function generateQAPairs(transcript: string, analysisType: string = 'standard'): Promise<QAPair[]> {
-  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-  
-  if (!openaiApiKey) {
-    throw new Error('OpenAI API key not configured');
+function createContentChunks(transcript: string, tier: string): ContentChunk[] {
+  // Determine chunk size based on content tier
+  const chunkSizes = {
+    'micro': 15000,     // Single chunk
+    'short': 15000,     // Single chunk
+    'medium': 12000,    // 2-3 chunks with overlap
+    'long': 10000,      // 3-5 chunks with overlap
+    'extended': 8000,   // 5-8 chunks with overlap
+    'marathon': 6000    // 8+ chunks with overlap
+  };
+
+  const chunkSize = chunkSizes[tier as keyof typeof chunkSizes] || 10000;
+  const overlapSize = Math.floor(chunkSize * 0.2); // 20% overlap
+
+  // For micro and short content, return single chunk
+  if (tier === 'micro' || tier === 'short' || transcript.length <= chunkSize) {
+    return [{
+      text: transcript,
+      startIndex: 0,
+      endIndex: transcript.length,
+      chunkNumber: 1
+    }];
   }
 
+  const chunks: ContentChunk[] = [];
+  let startIndex = 0;
+  let chunkNumber = 1;
+
+  while (startIndex < transcript.length) {
+    let endIndex = Math.min(startIndex + chunkSize, transcript.length);
+    
+    // Try to end at a sentence boundary if possible
+    if (endIndex < transcript.length) {
+      const sentenceEnd = transcript.lastIndexOf('.', endIndex);
+      const questionEnd = transcript.lastIndexOf('?', endIndex);
+      const exclamationEnd = transcript.lastIndexOf('!', endIndex);
+      
+      const bestEnd = Math.max(sentenceEnd, questionEnd, exclamationEnd);
+      if (bestEnd > startIndex + chunkSize * 0.7) {
+        endIndex = bestEnd + 1;
+      }
+    }
+
+    chunks.push({
+      text: transcript.substring(startIndex, endIndex),
+      startIndex,
+      endIndex,
+      chunkNumber
+    });
+
+    startIndex = endIndex - overlapSize;
+    chunkNumber++;
+  }
+
+  return chunks;
+}
+
+async function processChunk(chunk: ContentChunk, analysisType: string, openaiApiKey: string, totalChunks: number): Promise<QAPair[]> {
+  const chunkInfo = totalChunks > 1 ? `This is chunk ${chunk.chunkNumber} of ${totalChunks}.` : '';
+  const systemPrompt = getSystemPrompt(analysisType, totalChunks > 1, chunkInfo);
+  
   try {
-    console.log('Generating Q&A pairs with analysis type:', analysisType);
-    
-    // Truncate transcript to first 15,000 characters to stay within token limits
-    const truncatedTranscript = transcript.substring(0, 15000);
-    
-    const systemPrompt = getSystemPrompt(analysisType);
+    console.log(`Processing chunk ${chunk.chunkNumber}/${totalChunks}, length: ${chunk.text.length}`);
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -266,7 +325,7 @@ async function generateQAPairs(transcript: string, analysisType: string = 'stand
           },
           {
             role: 'user',
-            content: `Please analyze this video transcript and generate Q&A pairs:\n\n${truncatedTranscript}`
+            content: `Please analyze this video transcript section and generate Q&A pairs:\n\n${chunk.text}`
           }
         ],
         max_tokens: 2000,
@@ -275,14 +334,13 @@ async function generateQAPairs(transcript: string, analysisType: string = 'stand
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      throw new Error(`OpenAI API error for chunk ${chunk.chunkNumber}: ${response.status}`);
     }
 
     const data = await response.json();
     const content = data.choices[0].message.content;
     
     try {
-      // Try to parse the JSON response
       const qaPairs = JSON.parse(content);
       
       if (Array.isArray(qaPairs)) {
@@ -291,16 +349,96 @@ async function generateQAPairs(transcript: string, analysisType: string = 'stand
           answer: qa.answer || '',
           category: qa.category || 'general',
           importance: qa.importance || 3,
-          timestamp: qa.timestamp || undefined
+          timestamp: qa.timestamp || undefined,
+          chunkIndex: chunk.chunkNumber
         }));
       }
     } catch (parseError) {
-      console.error('Error parsing OpenAI response:', parseError);
-      console.log('Raw response:', content);
+      console.error(`Error parsing chunk ${chunk.chunkNumber} response:`, parseError);
     }
 
-    // Fallback: return empty array if parsing fails
     return [];
+  } catch (error) {
+    console.error(`Error processing chunk ${chunk.chunkNumber}:`, error);
+    return [];
+  }
+}
+
+function deduplicateAndRankQAPairs(allQAPairs: QAPair[]): QAPair[] {
+  // Group similar questions and keep the best ones
+  const questionGroups = new Map<string, QAPair[]>();
+  
+  allQAPairs.forEach(qa => {
+    const normalizedQuestion = qa.question.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    const key = normalizedQuestion.substring(0, 50); // Use first 50 chars as key
+    
+    if (!questionGroups.has(key)) {
+      questionGroups.set(key, []);
+    }
+    questionGroups.get(key)!.push(qa);
+  });
+  
+  const deduplicatedPairs: QAPair[] = [];
+  
+  questionGroups.forEach(group => {
+    if (group.length === 1) {
+      deduplicatedPairs.push(group[0]);
+    } else {
+      // Keep the one with highest importance, or most detailed answer
+      const best = group.reduce((prev, current) => {
+        if (current.importance > prev.importance) return current;
+        if (current.importance === prev.importance && current.answer.length > prev.answer.length) return current;
+        return prev;
+      });
+      deduplicatedPairs.push(best);
+    }
+  });
+  
+  // Sort by importance (descending) and then by category
+  return deduplicatedPairs
+    .sort((a, b) => {
+      if (b.importance !== a.importance) return b.importance - a.importance;
+      return a.category.localeCompare(b.category);
+    })
+    .slice(0, 20); // Limit to top 20 Q&A pairs
+}
+
+async function generateQAPairs(transcript: string, analysisType: string = 'standard'): Promise<QAPair[]> {
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  
+  if (!openaiApiKey) {
+    throw new Error('OpenAI API key not configured');
+  }
+
+  try {
+    console.log('Generating Q&A pairs with analysis type:', analysisType);
+    
+    // Determine content tier and create appropriate chunks
+    const segmentCount = Math.ceil(transcript.length / 100);
+    const tier = getContentTier(segmentCount);
+    const chunks = createContentChunks(transcript, tier);
+    
+    console.log(`Created ${chunks.length} chunks for ${tier} tier content`);
+    
+    // Process chunks in parallel for better performance
+    const chunkPromises = chunks.map(chunk => 
+      processChunk(chunk, analysisType, openaiApiKey, chunks.length)
+    );
+    
+    // Wait for all chunks to complete
+    const chunkResults = await Promise.all(chunkPromises);
+    
+    // Flatten and combine all Q&A pairs
+    const allQAPairs = chunkResults.flat();
+    
+    console.log(`Generated ${allQAPairs.length} total Q&A pairs from ${chunks.length} chunks`);
+    
+    // Deduplicate and rank the results
+    const finalQAPairs = deduplicateAndRankQAPairs(allQAPairs);
+    
+    console.log(`Final result: ${finalQAPairs.length} unique Q&A pairs`);
+    
+    return finalQAPairs;
   } catch (error) {
     console.error('Error generating Q&A pairs:', error);
     throw error;
@@ -488,7 +626,9 @@ serve(async (req) => {
         type: analysisType || 'standard',
         segmentCount: Math.ceil(transcript.length / 100),
         tier: getContentTier(Math.ceil(transcript.length / 100)),
-        creditsUsed: userId ? getRequiredCredits(analysisType, Math.ceil(transcript.length / 100)) : 0
+        creditsUsed: userId ? getRequiredCredits(analysisType, Math.ceil(transcript.length / 100)) : 0,
+        chunksProcessed: createContentChunks(transcript, getContentTier(Math.ceil(transcript.length / 100))).length,
+        processingMethod: createContentChunks(transcript, getContentTier(Math.ceil(transcript.length / 100))).length > 1 ? 'chunked' : 'single'
       }
     }), {
       status: 200,
