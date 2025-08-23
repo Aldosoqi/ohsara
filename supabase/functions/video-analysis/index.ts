@@ -181,68 +181,100 @@ async function getVideoMetadata(videoId: string): Promise<VideoMetadata> {
 }
 
 function getSystemPrompt(analysisType: string, isChunked: boolean = false, chunkInfo?: string): string {
-  const basePrompt = `You are a video content analysis expert. Your task is to analyze video transcripts and generate helpful Q&A pairs.
+  const basePrompt = `You are an expert video content analyzer. Extract comprehensive insights and generate Q&A pairs covering ALL aspects of the content.
 
-${isChunked ? `NOTE: This is part of a larger transcript. ${chunkInfo || ''} Focus on the content in this section while being aware it's part of a larger whole.` : ''}
+${isChunked ? `NOTE: This is part of a larger transcript. ${chunkInfo || ''} Focus on this section while maintaining awareness of the broader context.` : ''}
 
-Return your response as a JSON array of objects with this structure:
+EXTRACTION FOCUS AREAS:
+1. TITLE KEYWORDS: Extract and analyze key terms, promises, and hooks from the title
+2. VISUAL PROPERTIES: Analyze thumbnail elements, visual cues, branding, and design choices
+3. TEXT ELEMENTS: Identify on-screen text, captions, graphics, and textual information
+4. VIEWER EXPECTATIONS: Determine what viewers expect vs. what's actually delivered
+
+Return a JSON array with this structure:
 {
   "question": "string",
   "answer": "string", 
-  "category": "string",
+  "category": "title-analysis|visual-analysis|text-elements|viewer-expectations|content-core|practical-insights",
   "importance": number (1-5),
-  "timestamp": "MM:SS" (if available)
+  "timestamp": "MM:SS" (if available),
+  "extraction_type": "keyword|visual|textual|expectation|core-content"
 }`;
 
   switch (analysisType) {
     case 'comprehensive':
       return `${basePrompt}
 
-Analysis Type: COMPREHENSIVE
-- Extract every significant piece of information from this ${isChunked ? 'section' : 'transcript'}
-- Cover main topics, subtopics, examples, and details
-- Include background context and explanations
-- Generate ${isChunked ? '4-8' : '8-15'} Q&A pairs
-- Categories: main-topic, detail, example, context, conclusion`;
+COMPREHENSIVE ANALYSIS:
+- Extract EVERY significant detail from title, visuals, text, and content
+- Cover all promises made in title/thumbnail vs. actual delivery
+- Identify every visual element and its purpose
+- Extract all on-screen text and its context
+- Generate ${isChunked ? '6-10' : '12-20'} Q&A pairs covering:
+  * Title keyword analysis (2-3 pairs)
+  * Thumbnail visual breakdown (2-3 pairs)
+  * Text elements identification (2-4 pairs)
+  * Viewer expectation vs reality (2-3 pairs)
+  * Core content extraction (4-8 pairs)`;
 
     case 'key-points':
       return `${basePrompt}
 
-Analysis Type: KEY POINTS
-- Focus on the most important and actionable information in this ${isChunked ? 'section' : 'transcript'}
-- Prioritize takeaways and practical insights
-- Skip minor details and tangents
-- Generate ${isChunked ? '3-5' : '5-8'} Q&A pairs
-- Categories: key-point, takeaway, action-item, insight`;
+KEY POINTS FOCUS:
+- Extract most impactful title keywords and their implications
+- Identify primary visual hooks and their effectiveness
+- Focus on main text elements that drive the message
+- Analyze core viewer expectations vs. key deliverables
+- Generate ${isChunked ? '4-6' : '8-12'} Q&A pairs covering:
+  * Critical title elements (1-2 pairs)
+  * Main visual hooks (1-2 pairs)
+  * Key text messages (1-2 pairs)
+  * Primary expectations (1-2 pairs)
+  * Essential content points (3-4 pairs)`;
 
     case 'academic':
       return `${basePrompt}
 
-Analysis Type: ACADEMIC
-- Extract definitions, theories, and research findings from this ${isChunked ? 'section' : 'transcript'}
-- Focus on educational content and learning objectives
-- Include methodologies and evidence presented
-- Generate ${isChunked ? '3-6' : '6-12'} Q&A pairs
-- Categories: definition, theory, research, methodology, evidence`;
+ACADEMIC ANALYSIS:
+- Analyze title for educational keywords and learning objectives
+- Examine visual elements for educational design principles
+- Extract all textual information for academic context
+- Assess educational expectations vs. academic delivery
+- Generate ${isChunked ? '5-8' : '10-15'} Q&A pairs covering:
+  * Educational title elements (2 pairs)
+  * Academic visual design (2 pairs)
+  * Textual learning aids (2-3 pairs)
+  * Learning expectations (2 pairs)
+  * Academic content core (3-6 pairs)`;
 
     case 'tutorial':
       return `${basePrompt}
 
-Analysis Type: TUTORIAL
-- Focus on step-by-step instructions and procedures in this ${isChunked ? 'section' : 'transcript'}
-- Extract tools, prerequisites, and requirements
-- Include troubleshooting and common mistakes
-- Generate ${isChunked ? '3-5' : '6-10'} Q&A pairs
-- Categories: step, tool, prerequisite, troubleshooting, tip`;
+TUTORIAL ANALYSIS:
+- Extract action keywords and process indicators from title
+- Analyze visual cues for step-by-step guidance
+- Identify instructional text elements and guides
+- Evaluate tutorial expectations vs. actual instruction quality
+- Generate ${isChunked ? '4-7' : '8-14'} Q&A pairs covering:
+  * Tutorial title promises (1-2 pairs)
+  * Visual instruction cues (1-2 pairs)
+  * Instructional text elements (2-3 pairs)
+  * Tutorial expectations (1-2 pairs)
+  * Step-by-step content (3-6 pairs)`;
 
     default:
       return `${basePrompt}
 
-Analysis Type: STANDARD
-- Balance between detail and key points in this ${isChunked ? 'section' : 'transcript'}
-- Extract main topics and important details
-- Generate ${isChunked ? '3-5' : '6-10'} Q&A pairs
-- Categories: main-topic, detail, insight, conclusion`;
+STANDARD ANALYSIS:
+- Balance extraction across title, visuals, text, and content
+- Identify key elements without overwhelming detail
+- Focus on viewer journey from expectation to delivery
+- Generate ${isChunked ? '4-6' : '8-12'} Q&A pairs covering:
+  * Title keyword insights (1-2 pairs)
+  * Visual element analysis (1-2 pairs)
+  * Text element extraction (1-2 pairs)
+  * Expectation analysis (1-2 pairs)
+  * Core content highlights (3-4 pairs)`;
   }
 }
 
@@ -303,12 +335,28 @@ function createContentChunks(transcript: string, tier: string): ContentChunk[] {
   return chunks;
 }
 
-async function processChunk(chunk: ContentChunk, analysisType: string, openaiApiKey: string, totalChunks: number): Promise<QAPair[]> {
+async function processChunk(
+  chunk: ContentChunk, 
+  analysisType: string, 
+  openaiApiKey: string, 
+  totalChunks: number, 
+  metadata: VideoMetadata,
+  thumbnailAnalysis?: string
+): Promise<QAPair[]> {
   const chunkInfo = totalChunks > 1 ? `This is chunk ${chunk.chunkNumber} of ${totalChunks}.` : '';
   const systemPrompt = getSystemPrompt(analysisType, totalChunks > 1, chunkInfo);
   
+  // Prepare comprehensive context including title, thumbnail, and content
+  let analysisContext = `VIDEO TITLE: "${metadata.title}"
+VIDEO DESCRIPTION: ${metadata.description.substring(0, 500)}${metadata.description.length > 500 ? '...' : ''}
+
+${thumbnailAnalysis ? `THUMBNAIL ANALYSIS: ${thumbnailAnalysis}` : ''}
+
+TRANSCRIPT SECTION:
+${chunk.text}`;
+
   try {
-    console.log(`Processing chunk ${chunk.chunkNumber}/${totalChunks}, length: ${chunk.text.length}`);
+    console.log(`Processing chunk ${chunk.chunkNumber}/${totalChunks} with comprehensive analysis`);
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -325,11 +373,11 @@ async function processChunk(chunk: ContentChunk, analysisType: string, openaiApi
           },
           {
             role: 'user',
-            content: `Please analyze this video transcript section and generate Q&A pairs:\n\n${chunk.text}`
+            content: `Analyze this video content comprehensively, focusing on title keywords, visual elements, text components, and viewer expectations:\n\n${analysisContext}`
           }
         ],
-        max_tokens: 2000,
-        temperature: 0.3,
+        max_tokens: 2500,
+        temperature: 0.2,
       }),
     });
 
@@ -347,10 +395,11 @@ async function processChunk(chunk: ContentChunk, analysisType: string, openaiApi
         return qaPairs.map(qa => ({
           question: qa.question || '',
           answer: qa.answer || '',
-          category: qa.category || 'general',
+          category: qa.category || 'content-core',
           importance: qa.importance || 3,
           timestamp: qa.timestamp || undefined,
-          chunkIndex: chunk.chunkNumber
+          chunkIndex: chunk.chunkNumber,
+          extractionType: qa.extraction_type || 'core-content'
         }));
       }
     } catch (parseError) {
@@ -365,12 +414,22 @@ async function processChunk(chunk: ContentChunk, analysisType: string, openaiApi
 }
 
 function deduplicateAndRankQAPairs(allQAPairs: QAPair[]): QAPair[] {
+  // Prioritize extraction categories for comprehensive coverage
+  const categoryPriority = {
+    'title-analysis': 5,
+    'visual-analysis': 4,
+    'text-elements': 4,
+    'viewer-expectations': 5,
+    'content-core': 3,
+    'practical-insights': 4
+  };
+
   // Group similar questions and keep the best ones
   const questionGroups = new Map<string, QAPair[]>();
   
   allQAPairs.forEach(qa => {
     const normalizedQuestion = qa.question.toLowerCase().replace(/[^\w\s]/g, '').trim();
-    const key = normalizedQuestion.substring(0, 50); // Use first 50 chars as key
+    const key = normalizedQuestion.substring(0, 60); // Use first 60 chars as key
     
     if (!questionGroups.has(key)) {
       questionGroups.set(key, []);
@@ -384,26 +443,87 @@ function deduplicateAndRankQAPairs(allQAPairs: QAPair[]): QAPair[] {
     if (group.length === 1) {
       deduplicatedPairs.push(group[0]);
     } else {
-      // Keep the one with highest importance, or most detailed answer
+      // Keep the one with highest category priority, then importance, then detail
       const best = group.reduce((prev, current) => {
-        if (current.importance > prev.importance) return current;
-        if (current.importance === prev.importance && current.answer.length > prev.answer.length) return current;
+        const prevPriority = categoryPriority[prev.category as keyof typeof categoryPriority] || 2;
+        const currentPriority = categoryPriority[current.category as keyof typeof categoryPriority] || 2;
+        
+        if (currentPriority > prevPriority) return current;
+        if (currentPriority === prevPriority && current.importance > prev.importance) return current;
+        if (currentPriority === prevPriority && current.importance === prev.importance && current.answer.length > prev.answer.length) return current;
         return prev;
       });
       deduplicatedPairs.push(best);
     }
   });
   
-  // Sort by importance (descending) and then by category
+  // Sort by category priority, then importance, ensuring comprehensive coverage
   return deduplicatedPairs
     .sort((a, b) => {
+      const aPriority = categoryPriority[a.category as keyof typeof categoryPriority] || 2;
+      const bPriority = categoryPriority[b.category as keyof typeof categoryPriority] || 2;
+      
+      if (bPriority !== aPriority) return bPriority - aPriority;
       if (b.importance !== a.importance) return b.importance - a.importance;
       return a.category.localeCompare(b.category);
     })
-    .slice(0, 20); // Limit to top 20 Q&A pairs
+    .slice(0, 25); // Increased limit for comprehensive coverage
 }
 
-async function generateQAPairs(transcript: string, analysisType: string = 'standard'): Promise<QAPair[]> {
+async function generateThumbnailAnalysis(thumbnailUrl: string, openaiApiKey: string): Promise<string> {
+  if (!thumbnailUrl) return '';
+  
+  try {
+    console.log('Analyzing thumbnail:', thumbnailUrl);
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-2025-04-14',
+        messages: [
+          {
+            role: 'system',
+            content: 'Analyze this video thumbnail image. Focus on: visual design elements, text overlays, color schemes, facial expressions, objects, branding elements, and overall visual appeal. Provide a concise analysis in 2-3 sentences.'
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Please analyze this video thumbnail:'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: thumbnailUrl
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      console.log('Thumbnail analysis failed, continuing without it');
+      return '';
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content || '';
+  } catch (error) {
+    console.error('Error analyzing thumbnail:', error);
+    return '';
+  }
+}
+
+async function generateQAPairs(transcript: string, metadata: VideoMetadata, analysisType: string = 'standard'): Promise<QAPair[]> {
   const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
   
   if (!openaiApiKey) {
@@ -411,18 +531,24 @@ async function generateQAPairs(transcript: string, analysisType: string = 'stand
   }
 
   try {
-    console.log('Generating Q&A pairs with analysis type:', analysisType);
+    console.log('Starting comprehensive Q&A generation with:', analysisType);
+    
+    // Generate thumbnail analysis if available
+    let thumbnailAnalysis = '';
+    if (metadata.thumbnailUrl) {
+      thumbnailAnalysis = await generateThumbnailAnalysis(metadata.thumbnailUrl, openaiApiKey);
+    }
     
     // Determine content tier and create appropriate chunks
     const segmentCount = Math.ceil(transcript.length / 100);
     const tier = getContentTier(segmentCount);
     const chunks = createContentChunks(transcript, tier);
     
-    console.log(`Created ${chunks.length} chunks for ${tier} tier content`);
+    console.log(`Created ${chunks.length} chunks for ${tier} tier content with comprehensive analysis`);
     
-    // Process chunks in parallel for better performance
+    // Process chunks in parallel with enhanced context
     const chunkPromises = chunks.map(chunk => 
-      processChunk(chunk, analysisType, openaiApiKey, chunks.length)
+      processChunk(chunk, analysisType, openaiApiKey, chunks.length, metadata, thumbnailAnalysis)
     );
     
     // Wait for all chunks to complete
@@ -431,16 +557,16 @@ async function generateQAPairs(transcript: string, analysisType: string = 'stand
     // Flatten and combine all Q&A pairs
     const allQAPairs = chunkResults.flat();
     
-    console.log(`Generated ${allQAPairs.length} total Q&A pairs from ${chunks.length} chunks`);
+    console.log(`Generated ${allQAPairs.length} total Q&A pairs covering title, visuals, text, and expectations`);
     
-    // Deduplicate and rank the results
+    // Deduplicate and rank with category prioritization
     const finalQAPairs = deduplicateAndRankQAPairs(allQAPairs);
     
-    console.log(`Final result: ${finalQAPairs.length} unique Q&A pairs`);
+    console.log(`Final comprehensive result: ${finalQAPairs.length} Q&A pairs with full coverage`);
     
     return finalQAPairs;
   } catch (error) {
-    console.error('Error generating Q&A pairs:', error);
+    console.error('Error generating comprehensive Q&A pairs:', error);
     throw error;
   }
 }
@@ -602,7 +728,7 @@ serve(async (req) => {
     try {
       // Generate Q&A pairs using AI
       if (transcript && transcript !== 'Transcript not available for this video.') {
-        qaPairs = await generateQAPairs(transcript, analysisType || 'standard');
+        qaPairs = await generateQAPairs(transcript, metadata, analysisType || 'standard');
         console.log('Generated Q&A pairs:', qaPairs.length);
       }
     } catch (error) {
