@@ -1,1 +1,4 @@
 project_id = "zkoktwjrmmvmwiftxxmf"
+
+[functions.video-analysis]
+verify_jwt = false
